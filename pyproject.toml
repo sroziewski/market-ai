@@ -1,0 +1,15 @@
+[tool.poetry]
+name = "market-ai"
+version = "0.1.0"
+description = ""
+authors = ["Szymon Roziewski <szymon.roziewski@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "3.10.12"
+ta-lib = "^0.6.3"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
