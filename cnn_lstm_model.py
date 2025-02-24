@@ -8,6 +8,8 @@ from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm  # For progress bar support
 
 
+os.environ["CUDA_VISIBLE_DEVICES"] = "3"
+
 # Custom Dataset for Price Data
 class PriceDataset(Dataset):
     """Custom Dataset for price data."""
