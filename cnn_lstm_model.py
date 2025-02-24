@@ -82,13 +82,27 @@ class HybridPriceRegressor(nn.Module):
         return np.array(X), self.scaler_X
 
     def create_labels(self, klines_df):
+        """
+        Create labels for predictions based on the lookback period, 20-period, and 50-period windows.
+
+        Arguments:
+            klines_df (pd.DataFrame): The input dataframe containing OHLC data.
+
+        Returns:
+            np.ndarray: Scaled labels for the model training.
+        """
         close_prices = klines_df['close'].values
         high_prices = klines_df['high'].values
         low_prices = klines_df['low'].values
         y = []
-        for i in range(self.lookback_period, len(close_prices)):
+
+        # Use tqdm to add progress bar for the loop
+        for i in tqdm(range(self.lookback_period, len(close_prices)), desc="Creating Labels"):
+            # Define windows for 20-period and 50-period calculations
             window_20 = slice(i, min(i + 20, len(close_prices)))
             window_50 = slice(i, min(i + 50, len(close_prices)))
+
+            # Append calculated labels to the output list
             y.append([
                 np.min(low_prices[window_20]),
                 np.max(high_prices[window_20]),
@@ -97,6 +111,8 @@ class HybridPriceRegressor(nn.Module):
                 np.max(high_prices[window_50]),
                 np.mean(close_prices[window_50])
             ])
+
+        # Scale the calculated labels
         y_scaled = self.scaler_y.fit_transform(np.array(y))
         return y_scaled
 
