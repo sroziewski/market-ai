@@ -127,7 +127,7 @@ class HybridPriceRegressor(nn.Module):
         best_model_state = None
 
         for epoch in range(epochs):
-            self.train()  # Set to training mode
+            self.train(klines_df)  # Set to training mode
             train_loss = 0
 
             # Progress bar for training batches
