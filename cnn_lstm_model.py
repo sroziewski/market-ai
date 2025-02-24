@@ -11,7 +11,7 @@ def read_csv_with_columns(filename):
     column_names = ['timestamp', 'open', 'high', 'low', 'close', 'volume',
                     'close_time', 'quote_volume', 'trades', 'taker_base_volume', 'taker_quote_volume']
     try:
-        df = pd.read_csv(filename, names=column_names, header=None)  # Use `header=None` if no header in CSV
+        df = pd.read_csv(filename)  # Use `header=None` if no header in CSV
         print("CSV file loaded successfully with custom columns!")
         return df
     except FileNotFoundError:
@@ -31,7 +31,6 @@ class PriceDataset(Dataset):
 
     def __getitem__(self, idx):
         return self.X[idx], self.y[idx]
-
 
 class HybridPriceRegressor(nn.Module):
     def __init__(self, lookback_period=50, input_features=4, cnn_filters=32, lstm_units=64, dropout_rate=0.3):
@@ -64,8 +63,8 @@ class HybridPriceRegressor(nn.Module):
 
         # LSTM Temporal Processing
         # After two poolings, sequence length reduces from 50 to 12 (50 // 2 // 2)
-        self.lstm1 = nn.LSTM(cnn_filters * 2, lstm_units, batch_first=True, return_sequences=True)
-        self.bn_lstm = nn.BatchNorm1d(lstm_units)
+        self.lstm1 = nn.LSTM(cnn_filters * 2, lstm_units, batch_first=True)
+        self.bn_lstm = nn.BatchNorm1d(lstm_units)  # Optional, technically applies only along batches
         self.lstm2 = nn.LSTM(lstm_units, lstm_units // 2, batch_first=True)
 
         # Dense Regression Layers
@@ -139,7 +138,8 @@ class HybridPriceRegressor(nn.Module):
         y_scaled = self.scaler_y.fit_transform(np.array(y))
         return y_scaled
 
-    def train(self, klines_df, epochs=50, batch_size=32, validation_split=0.2, patience=10, device='cuda' if torch.cuda.is_available() else 'cpu'):
+    def train(self, klines_df, epochs=50, batch_size=32, validation_split=0.2, patience=10,
+              device='cuda' if torch.cuda.is_available() else 'cpu'):
         """
         Train the model with early stopping and learning rate reduction.
         """
@@ -164,9 +164,8 @@ class HybridPriceRegressor(nn.Module):
         best_val_loss = float('inf')
         patience_counter = 0
         best_model_state = None
-
         for epoch in range(epochs):
-            self.train()
+            self.train(klines_df)
             train_loss = 0
             train_mae = 0
             for X_batch, y_batch in train_loader:
@@ -195,7 +194,7 @@ class HybridPriceRegressor(nn.Module):
             val_loss /= len(val_loader)
             val_mae /= len(val_loader)
 
-            print(f"Epoch {epoch+1}/{epochs}: Train Loss: {train_loss:.4f}, Train MAE: {train_mae:.4f}, "
+            print(f"Epoch {epoch + 1}/{epochs}: Train Loss: {train_loss:.4f}, Train MAE: {train_mae:.4f}, "
                   f"Val Loss: {val_loss:.4f}, Val MAE: {val_mae:.4f}")
 
             scheduler.step(val_loss)
@@ -247,10 +246,8 @@ class HybridPriceRegressor(nn.Module):
             mae = torch.mean(torch.abs(y_pred - y_tensor)).item()
         return [mse, mae]
 
-
-# Example usage
 if __name__ == "__main__":
-    sample_data = read_csv_with_columns("/home/simon/data/crypto/klines/BTCUSDT/BTCUSDT_15m.csv")
+    sample_data = read_csv_with_columns("/raid/sroziewski/data/crypto/klines/BTCUSDT/BTCUSDT_15m.csv")
 
     regressor = HybridPriceRegressor(lookback_period=50, input_features=4)
     history = regressor.train(sample_data, epochs=50, batch_size=32, validation_split=0.2, patience=10)
@@ -263,3 +260,5 @@ if __name__ == "__main__":
 
     loss, mae = regressor.evaluate(sample_data)
     print(f"Evaluation Loss (MSE): {loss:.4f}, MAE: {mae:.4f}")
+
+
