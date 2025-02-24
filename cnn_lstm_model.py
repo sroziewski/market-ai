@@ -152,7 +152,8 @@ class HybridPriceRegressor(nn.Module):
 
         return y_scaled
 
-    def train_model(self, klines_df, epochs=50, batch_size=32, validation_split=0.2, patience=10, device='cuda'):
+    def train_model(self, klines_df, epochs=50, batch_size=32, validation_split=0.2, patience=10, device='cuda',
+                    save_path="hybrid_price_regressor.pth"):
         self.to(device)
 
         # Prepare data
@@ -179,15 +180,19 @@ class HybridPriceRegressor(nn.Module):
         for epoch in range(epochs):
             self.train()  # Set to training mode
             train_loss = 0
+            print(f"Epoch {epoch + 1} - Using device: {next(self.parameters()).device}")  # Report device
             with tqdm(train_loader, desc=f"Epoch {epoch + 1}/{epochs}", unit="batch") as pbar:
                 for X_batch, y_batch in pbar:
-                    X_batch, y_batch = X_batch.to(device), y_batch.to(device)
+                    X_batch, y_batch = X_batch.to(device), y_batch.to(device)  # Ensure data on GPU
+                    print(f"X_batch: {X_batch.device}, y_batch: {y_batch.device}")  # Debugging step
+
                     optimizer.zero_grad()
                     y_pred = self(X_batch)
                     loss = criterion(y_pred, y_batch)
                     loss.backward()
                     optimizer.step()
                     train_loss += loss.item()
+
                     pbar.set_postfix({"Train Loss": loss.item()})
 
             train_loss /= len(train_loader)
@@ -211,15 +216,24 @@ class HybridPriceRegressor(nn.Module):
                 best_val_loss = val_loss
                 best_model_state = self.state_dict()
                 patience_counter = 0
+                # Save the best model state during training
+                torch.save(best_model_state, save_path)
+                print(f"Model saved with Val Loss: {best_val_loss:.4f}")
             else:
                 patience_counter += 1
                 if patience_counter >= patience:
                     print("Early stopping triggered")
                     break
 
-        # Restore the best model
+        # Restore the best model state if it was saved
         if best_model_state:
             self.load_state_dict(best_model_state)
+            print("Restoring best model state.")
+
+        # Save the final trained model at the end
+        final_model_path = "final_" + save_path
+        torch.save(self.state_dict(), final_model_path)
+        print(f"Final model saved to {final_model_path}")
 
     def predict(self, klines_df, device='cuda'):
         self.to(device)
