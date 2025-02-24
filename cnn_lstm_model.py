@@ -152,7 +152,7 @@ class HybridPriceRegressor(nn.Module):
 
         return y_scaled
 
-    def train(self, klines_df, epochs=50, batch_size=32, validation_split=0.2, patience=10, device='cuda'):
+    def train_model(self, klines_df, epochs=50, batch_size=32, validation_split=0.2, patience=10, device='cuda'):
         self.to(device)
 
         # Prepare data
@@ -254,7 +254,7 @@ if __name__ == "__main__":
     sample_data = pd.read_csv("/raid/sroziewski/data/crypto/klines/BTCUSDT/BTCUSDT_15m.csv")
 
     regressor = HybridPriceRegressor(lookback_period=50, input_features=4)
-    regressor.train(sample_data, epochs=50, batch_size=32, validation_split=0.2, patience=10)
+    regressor.train_model(sample_data, epochs=50, batch_size=32, validation_split=0.2, patience=10)
 
     predictions = regressor.predict(sample_data)
     print("Sample predictions (first 5):")
