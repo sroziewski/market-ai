@@ -1,4 +1,6 @@
+import gzip
 import os
+import pickle
 
 import numpy as np
 import pandas as pd
@@ -111,16 +113,17 @@ class HybridPriceRegressor(nn.Module):
         X = [data_scaled[i - self.lookback_period:i] for i in range(self.lookback_period, len(data))]
         return np.array(X), self.scaler_X
 
-    def create_labels(self, klines_df):
+    def create_labels(self, klines_df, output_path="labels.npz", compress=True):
         """
-        Create labels for predictions based on the lookback period, 20-period, and 50-period windows.
-        This version runs in parallel using multiple CPU cores for efficiency.
+        Create labels for predictions and optionally save them as a compressed file.
 
         Arguments:
             klines_df (pd.DataFrame): The input dataframe containing OHLC data.
+            output_path (str): Path to save the created labels (default: "labels.npz").
+            compress (bool): Whether to save the labels as a compressed file.
 
         Returns:
-            np.ndarray: Scaled labels for the model training.
+            np.ndarray: Scaled labels for the model training (also saved to file).
         """
         close_prices = klines_df['close'].values
         high_prices = klines_df['high'].values
@@ -129,23 +132,31 @@ class HybridPriceRegressor(nn.Module):
 
         # Create indices for processing
         indices = range(self.lookback_period, total_rows)
-        num_cores = cpu_count()  # Get the number of CPU cores
-        chunk_size = len(indices) // num_cores  # Size of each chunk
+        num_cores = cpu_count()  # Number of CPU cores
+        chunk_size = len(indices) // num_cores
         chunks = [indices[i:i + chunk_size] for i in range(0, len(indices), chunk_size)]
-
-        # Prepare arguments for `process_batch`
         args = [(chunk, low_prices, high_prices, close_prices, total_rows) for chunk in chunks]
 
-        # Use a Pool to process chunks in parallel
         with Pool(num_cores) as pool:
-            # Apply the helper function across chunks and add a progress bar with tqdm
             results = list(tqdm(pool.imap(process_batch, args), total=len(chunks), desc="Creating Labels"))
 
-        # Flatten the list of results (from each process) into a single list
         y = [label for batch in results for label in batch]
-
-        # Scale the labels
         y_scaled = self.scaler_y.fit_transform(np.array(y))
+
+        # Save the output
+        if compress:
+            if output_path.endswith(".npz"):
+                np.savez_compressed(output_path, y_scaled)
+            elif output_path.endswith(".pkl.gz"):
+                with gzip.open(output_path, "wb") as f:
+                    pickle.dump(y_scaled, f)
+            else:
+                raise ValueError("Unsupported file format. Use .npz or .pkl.gz for compressed files.")
+            print(f"Labels saved to {output_path}")
+        else:
+            np.save(output_path, y_scaled)  # Save as an uncompressed .npy file
+            print(f"Labels saved without compression to {output_path}")
+
         return y_scaled
 
     def train(self, klines_df, epochs=50, batch_size=32, validation_split=0.2, patience=10,
