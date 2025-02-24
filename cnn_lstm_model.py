@@ -71,6 +71,9 @@ class HybridPriceRegressor(nn.Module):
         self.scaler_X = MinMaxScaler()
         self.scaler_y = MinMaxScaler()
 
+        # Cache for labels
+        self.cached_labels = None
+
         # CNN Feature Extraction
         self.conv1 = nn.Conv1d(in_channels=input_features, out_channels=cnn_filters, kernel_size=3, padding=1)
         self.bn1 = nn.BatchNorm1d(cnn_filters)
@@ -113,18 +116,11 @@ class HybridPriceRegressor(nn.Module):
         X = [data_scaled[i - self.lookback_period:i] for i in range(self.lookback_period, len(data))]
         return np.array(X), self.scaler_X
 
-    def create_labels(self, klines_df, output_path="labels.npz", compress=True):
-        """
-        Create labels for predictions and only save the combined results at the end.
+    def create_labels(self, klines_df, save_path=None):
+        # Check if labels are already cached
+        if self.cached_labels is not None:
+            return self.cached_labels
 
-        Arguments:
-            klines_df (pd.DataFrame): The input dataframe containing OHLC data.
-            output_path (str): Path to save the labels (default: "labels.npz").
-            compress (bool): Whether to save as a compressed file (default: True).
-
-        Returns:
-            np.ndarray: Scaled labels for the model training (also saved to file).
-        """
         close_prices = klines_df['close'].values
         high_prices = klines_df['high'].values
         low_prices = klines_df['low'].values
@@ -145,34 +141,23 @@ class HybridPriceRegressor(nn.Module):
 
         # Combine all results into a single list
         y = [label for batch in results for label in batch]
+        y_scaled = self.scaler_y.fit_transform(np.array(y))  # Scale labels
 
-        # Scale the combined labels
-        y_scaled = self.scaler_y.fit_transform(np.array(y))
+        self.cached_labels = y_scaled  # Cache the labels to avoid recomputing
 
-        # Save results to the output file (only once at the end)
-        if compress:
-            if output_path.endswith(".npz"):
-                np.savez_compressed(output_path, y_scaled)  # Save as compressed .npz
-            elif output_path.endswith(".pkl.gz"):
-                with gzip.open(output_path, "wb") as f:
-                    pickle.dump(y_scaled, f)  # Save using pickle with gzip
-            else:
-                raise ValueError("Unsupported file format. Only .npz or .pkl.gz are supported.")
-            print(f"Labels saved to {output_path}")
-        else:
-            np.save(output_path, y_scaled)  # Save as uncompressed .npy
-            print(f"Labels saved to {output_path} (without compression)")
+        # Optionally save the labels to disk for persistent storage
+        if save_path:
+            np.savez_compressed(save_path, y_scaled)
+            print(f"Labels saved to {save_path}")
 
-        return y_scaled  # Also return the scaled labels for immediate use
+        return y_scaled
 
-    def train(self, klines_df, epochs=50, batch_size=32, validation_split=0.2, patience=10,
-              device='cuda' if torch.cuda.is_available() else 'cpu'):
-
+    def train(self, klines_df, epochs=50, batch_size=32, validation_split=0.2, patience=10, device='cuda'):
         self.to(device)
 
         # Prepare data
         X, _ = self.prepare_data(klines_df)
-        y = self.create_labels(klines_df)
+        y = self.create_labels(klines_df)  # Called only once and cached
         split_idx = int(len(X) * (1 - validation_split))
         X_train, X_val = X[:split_idx], X[split_idx:]
         y_train, y_val = y[:split_idx], y[split_idx:]
@@ -192,10 +177,8 @@ class HybridPriceRegressor(nn.Module):
         best_model_state = None
 
         for epoch in range(epochs):
-            self.train(klines_df)  # Set to training mode
+            self.train()  # Set to training mode
             train_loss = 0
-
-            # Progress bar for training batches
             with tqdm(train_loader, desc=f"Epoch {epoch + 1}/{epochs}", unit="batch") as pbar:
                 for X_batch, y_batch in pbar:
                     X_batch, y_batch = X_batch.to(device), y_batch.to(device)
@@ -234,10 +217,11 @@ class HybridPriceRegressor(nn.Module):
                     print("Early stopping triggered")
                     break
 
+        # Restore the best model
         if best_model_state:
             self.load_state_dict(best_model_state)
 
-    def predict(self, klines_df, device='cuda' if torch.cuda.is_available() else 'cpu'):
+    def predict(self, klines_df, device='cuda'):
         self.to(device)
         self.eval()
         X, _ = self.prepare_data(klines_df)
@@ -247,11 +231,11 @@ class HybridPriceRegressor(nn.Module):
         predictions = self.scaler_y.inverse_transform(predictions_scaled)
         return predictions.tolist()
 
-    def evaluate(self, klines_df, device='cuda' if torch.cuda.is_available() else 'cpu'):
+    def evaluate(self, klines_df, device='cuda'):
         self.to(device)
         self.eval()
         X, _ = self.prepare_data(klines_df)
-        y = self.create_labels(klines_df)
+        y = self.cached_labels if self.cached_labels is not None else self.create_labels(klines_df)
         X_tensor = torch.tensor(X, dtype=torch.float32).to(device)
         y_tensor = torch.tensor(y, dtype=torch.float32).to(device)
         with torch.no_grad():
@@ -259,6 +243,7 @@ class HybridPriceRegressor(nn.Module):
             mse = nn.MSELoss()(y_pred, y_tensor).item()
             mae = torch.mean(torch.abs(y_pred - y_tensor)).item()
         return [mse, mae]
+
 
 
 # Main Entry Point
