@@ -8,7 +8,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm  # For progress bar support
-
+from multiprocessing import Pool, cpu_count
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "3"
 
@@ -84,6 +84,7 @@ class HybridPriceRegressor(nn.Module):
     def create_labels(self, klines_df):
         """
         Create labels for predictions based on the lookback period, 20-period, and 50-period windows.
+        This version runs in parallel using multiple CPU cores for efficiency.
 
         Arguments:
             klines_df (pd.DataFrame): The input dataframe containing OHLC data.
@@ -94,25 +95,39 @@ class HybridPriceRegressor(nn.Module):
         close_prices = klines_df['close'].values
         high_prices = klines_df['high'].values
         low_prices = klines_df['low'].values
-        y = []
+        total_rows = len(close_prices)
 
-        # Use tqdm to add progress bar for the loop
-        for i in tqdm(range(self.lookback_period, len(close_prices)), desc="Creating Labels"):
-            # Define windows for 20-period and 50-period calculations
-            window_20 = slice(i, min(i + 20, len(close_prices)))
-            window_50 = slice(i, min(i + 50, len(close_prices)))
+        # Helper function for computing a batch of labels (executed in parallel)
+        def process_batch(row_range):
+            local_y = []
+            for i in row_range:
+                window_20 = slice(i, min(i + 20, total_rows))
+                window_50 = slice(i, min(i + 50, total_rows))
+                local_y.append([
+                    np.min(low_prices[window_20]),
+                    np.max(high_prices[window_20]),
+                    np.mean(close_prices[window_20]),
+                    np.min(low_prices[window_50]),
+                    np.max(high_prices[window_50]),
+                    np.mean(close_prices[window_50])
+                ])
+            return local_y
 
-            # Append calculated labels to the output list
-            y.append([
-                np.min(low_prices[window_20]),
-                np.max(high_prices[window_20]),
-                np.mean(close_prices[window_20]),
-                np.min(low_prices[window_50]),
-                np.max(high_prices[window_50]),
-                np.mean(close_prices[window_50])
-            ])
+        # Break up the rows that need processing into chunks for parallelism
+        indices = range(self.lookback_period, total_rows)
+        num_cores = cpu_count()  # Get the number of CPU cores
+        chunk_size = len(indices) // num_cores  # Size of each chunk
+        chunks = [indices[i:i + chunk_size] for i in range(0, len(indices), chunk_size)]
 
-        # Scale the calculated labels
+        # Use a Pool to process chunks in parallel
+        with Pool(num_cores) as pool:
+            # Apply the helper function across chunks and add a progress bar with tqdm
+            results = list(tqdm(pool.imap(process_batch, chunks), total=len(chunks), desc="Creating Labels"))
+
+        # Flatten the list of results (from each process) into a single list
+        y = [label for batch in results for label in batch]
+
+        # Scale the labels
         y_scaled = self.scaler_y.fit_transform(np.array(y))
         return y_scaled
 
