@@ -12,6 +12,36 @@ from multiprocessing import Pool, cpu_count
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "3"
 
+def process_batch(args):
+    """
+    Process a batch of rows to create labels for the given range.
+
+    Arguments:
+        args (tuple): A tuple containing:
+            - row_range (range): Indices to process
+            - low_prices (np.ndarray): Array of low prices
+            - high_prices (np.ndarray): Array of high prices
+            - close_prices (np.ndarray): Array of close prices
+            - total_rows (int): Total number of rows in the dataset
+
+    Returns:
+        list: A list of calculated labels for the rows in this batch
+    """
+    row_range, low_prices, high_prices, close_prices, total_rows = args
+    local_y = []
+    for i in row_range:
+        window_20 = slice(i, min(i + 20, total_rows))
+        window_50 = slice(i, min(i + 50, total_rows))
+        local_y.append([
+            np.min(low_prices[window_20]),
+            np.max(high_prices[window_20]),
+            np.mean(close_prices[window_20]),
+            np.min(low_prices[window_50]),
+            np.max(high_prices[window_50]),
+            np.mean(close_prices[window_50])
+        ])
+    return local_y
+
 # Custom Dataset for Price Data
 class PriceDataset(Dataset):
     """Custom Dataset for price data."""
@@ -97,32 +127,19 @@ class HybridPriceRegressor(nn.Module):
         low_prices = klines_df['low'].values
         total_rows = len(close_prices)
 
-        # Helper function for computing a batch of labels (executed in parallel)
-        def process_batch(row_range):
-            local_y = []
-            for i in row_range:
-                window_20 = slice(i, min(i + 20, total_rows))
-                window_50 = slice(i, min(i + 50, total_rows))
-                local_y.append([
-                    np.min(low_prices[window_20]),
-                    np.max(high_prices[window_20]),
-                    np.mean(close_prices[window_20]),
-                    np.min(low_prices[window_50]),
-                    np.max(high_prices[window_50]),
-                    np.mean(close_prices[window_50])
-                ])
-            return local_y
-
-        # Break up the rows that need processing into chunks for parallelism
+        # Create indices for processing
         indices = range(self.lookback_period, total_rows)
         num_cores = cpu_count()  # Get the number of CPU cores
         chunk_size = len(indices) // num_cores  # Size of each chunk
         chunks = [indices[i:i + chunk_size] for i in range(0, len(indices), chunk_size)]
 
+        # Prepare arguments for `process_batch`
+        args = [(chunk, low_prices, high_prices, close_prices, total_rows) for chunk in chunks]
+
         # Use a Pool to process chunks in parallel
         with Pool(num_cores) as pool:
             # Apply the helper function across chunks and add a progress bar with tqdm
-            results = list(tqdm(pool.imap(process_batch, chunks), total=len(chunks), desc="Creating Labels"))
+            results = list(tqdm(pool.imap(process_batch, args), total=len(chunks), desc="Creating Labels"))
 
         # Flatten the list of results (from each process) into a single list
         y = [label for batch in results for label in batch]
