@@ -115,12 +115,12 @@ class HybridPriceRegressor(nn.Module):
 
     def create_labels(self, klines_df, output_path="labels.npz", compress=True):
         """
-        Create labels for predictions and optionally save them as a compressed file.
+        Create labels for predictions and only save the combined results at the end.
 
         Arguments:
             klines_df (pd.DataFrame): The input dataframe containing OHLC data.
-            output_path (str): Path to save the created labels (default: "labels.npz").
-            compress (bool): Whether to save the labels as a compressed file.
+            output_path (str): Path to save the labels (default: "labels.npz").
+            compress (bool): Whether to save as a compressed file (default: True).
 
         Returns:
             np.ndarray: Scaled labels for the model training (also saved to file).
@@ -133,31 +133,37 @@ class HybridPriceRegressor(nn.Module):
         # Create indices for processing
         indices = range(self.lookback_period, total_rows)
         num_cores = cpu_count()  # Number of CPU cores
-        chunk_size = len(indices) // num_cores
+        chunk_size = len(indices) // num_cores  # Size of chunks distributed (approx evenly)
         chunks = [indices[i:i + chunk_size] for i in range(0, len(indices), chunk_size)]
+
+        # Prepare arguments for `process_batch`
         args = [(chunk, low_prices, high_prices, close_prices, total_rows) for chunk in chunks]
 
+        # Use Pool to process in parallel
         with Pool(num_cores) as pool:
             results = list(tqdm(pool.imap(process_batch, args), total=len(chunks), desc="Creating Labels"))
 
+        # Combine all results into a single list
         y = [label for batch in results for label in batch]
+
+        # Scale the combined labels
         y_scaled = self.scaler_y.fit_transform(np.array(y))
 
-        # Save the output
+        # Save results to the output file (only once at the end)
         if compress:
             if output_path.endswith(".npz"):
-                np.savez_compressed(output_path, y_scaled)
+                np.savez_compressed(output_path, y_scaled)  # Save as compressed .npz
             elif output_path.endswith(".pkl.gz"):
                 with gzip.open(output_path, "wb") as f:
-                    pickle.dump(y_scaled, f)
+                    pickle.dump(y_scaled, f)  # Save using pickle with gzip
             else:
-                raise ValueError("Unsupported file format. Use .npz or .pkl.gz for compressed files.")
+                raise ValueError("Unsupported file format. Only .npz or .pkl.gz are supported.")
             print(f"Labels saved to {output_path}")
         else:
-            np.save(output_path, y_scaled)  # Save as an uncompressed .npy file
-            print(f"Labels saved without compression to {output_path}")
+            np.save(output_path, y_scaled)  # Save as uncompressed .npy
+            print(f"Labels saved to {output_path} (without compression)")
 
-        return y_scaled
+        return y_scaled  # Also return the scaled labels for immediate use
 
     def train(self, klines_df, epochs=50, batch_size=32, validation_split=0.2, patience=10,
               device='cuda' if torch.cuda.is_available() else 'cpu'):
