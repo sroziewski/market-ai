@@ -151,7 +151,7 @@ class HybridPriceRegressor(nn.Module):
 
         return y_scaled
 
-    def train_model(self, klines_df, epochs=50, batch_size=512, validation_split=0.2, patience=10, device='cuda',
+    def train_model(self, klines_df, epochs=200, batch_size=512, validation_split=0.2, patience=10, device='cuda',
                     save_path="hybrid_price_regressor.pth"):
         self.to(device)
 
