@@ -125,7 +125,7 @@ def parallel_approximation(a, b, num_chunks=None, overlap=10):
         return np.array([])
 
     if num_chunks is None:
-        num_chunks = 8
+        num_chunks = 10
     else:
         num_chunks = int(num_chunks)
 
