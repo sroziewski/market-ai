@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import talib
+import matplotlib.dates as mdates
 
 
 def tc_top_bottom_finder(df, value_one=2, signal_strength=20):
@@ -264,11 +264,6 @@ def ehlers_smoothed_adaptive_momentum(df, source='hl2', alpha=0.07, cutoff=8.0):
     df['f3'] = f3
 
     return df
-
-
-import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
-import pandas as pd
 
 
 def visualize_ehlers_computation(df, save_path="ehlers_computation.png"):
