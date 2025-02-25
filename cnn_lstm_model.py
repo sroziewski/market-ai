@@ -12,7 +12,6 @@ from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm  # For progress bar support
 from multiprocessing import Pool, cpu_count
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "3"
 
 def process_batch(args):
     """
@@ -152,7 +151,7 @@ class HybridPriceRegressor(nn.Module):
 
         return y_scaled
 
-    def train_model(self, klines_df, epochs=50, batch_size=32, validation_split=0.2, patience=10, device='cuda',
+    def train_model(self, klines_df, epochs=50, batch_size=512, validation_split=0.2, patience=10, device='cuda',
                     save_path="hybrid_price_regressor.pth"):
         self.to(device)
 
