@@ -151,7 +151,7 @@ class HybridPriceRegressor(nn.Module):
 
         return y_scaled
 
-    def train_model(self, klines_df, epochs=200, batch_size=512, validation_split=0.2, patience=10, device='cuda',
+    def train_model(self, klines_df, epochs=200, batch_size=1024, validation_split=0.2, patience=10, device='cuda',
                     save_path="hybrid_price_regressor.pth"):
         self.to(device)
 
@@ -183,7 +183,7 @@ class HybridPriceRegressor(nn.Module):
             with tqdm(train_loader, desc=f"Epoch {epoch + 1}/{epochs}", unit="batch") as pbar:
                 for X_batch, y_batch in pbar:
                     X_batch, y_batch = X_batch.to(device), y_batch.to(device)  # Ensure data on GPU
-                    print(f"X_batch: {X_batch.device}, y_batch: {y_batch.device}")  # Debugging step
+                    # print(f"X_batch: {X_batch.device}, y_batch: {y_batch.device}")  # Debugging step
 
                     optimizer.zero_grad()
                     y_pred = self(X_batch)
