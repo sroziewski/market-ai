@@ -13,9 +13,10 @@ from tqdm import tqdm  # For progress bar support
 from custom_indicators import cycle_oscillator, tc_top_bottom_finder, volume_flow_indicator, generate_signal_label, \
     one_hot_encode_column
 
-features = ['open', 'high', 'low', 'close', 'macd_line', 'macd_signal', 'macd_histogram', 'rsi', 'stoch_rsi_k',
-            'stoch_rsi_d', 'omed', 'oshort', 'omed_ob', 'omed_os', 'oshort_ob', 'oshort_os', 'signal_label']
-
+features = ['open', 'high', 'low', 'volume', 'close', 'macd_line', 'macd_signal', 'macd_histogram', 'rsi', 'stoch_rsi_k',
+            'stoch_rsi_d', 'omed', 'oshort', 'omed_ob', 'omed_os', 'oshort_ob', 'oshort_os', 'signal_label',
+            'vfi', 'vfima', 'd']
+lookback = 130 # as for the volume_flow_indicator computation
 
 def process_batch(args):
     """
@@ -114,7 +115,7 @@ class PriceDataset(Dataset):
 
 # HybridPriceRegressor Model Definition
 class HybridPriceRegressor(nn.Module):
-    def __init__(self, lookback_period=50, input_features=4, cnn_filters=32,
+    def __init__(self, lookback_period=lookback, input_features=4, cnn_filters=32,
                  lstm_units=64, dropout_rate=0.3, attention_heads=4):
         super(HybridPriceRegressor, self).__init__()
         self.lookback_period = lookback_period
