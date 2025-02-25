@@ -5,10 +5,11 @@ import pandas as pd
 from sklearn.preprocessing import OneHotEncoder
 
 
-def approximation(a, b):
-    def nz(series, default=0):
-        return series.ffill().fillna(default)
+def nz(series, default=0):
+    return series.ffill().fillna(default)
 
+
+def approximation(a, b):
     l0 = np.zeros(len(a))
     l1 = np.zeros(len(a))
     l2 = np.zeros(len(a))
