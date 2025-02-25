@@ -31,7 +31,7 @@ def tc_top_bottom_finder(df, value_one=2, signal_strength=20):
         #  the returned indices are precisely at the time of a buy/sell signal
         return find_indices(_data, _p)  # 1 BUY / -1 SELL
 
-    def lele(threshold_value, strength):
+    def trend_reversal_signals(threshold_value, strength):
         n = len(df)
         bindex = np.zeros(n)
         sindex = np.zeros(n)
@@ -96,7 +96,7 @@ def tc_top_bottom_finder(df, value_one=2, signal_strength=20):
     # Only process if we have enough data
     if len(df) >= max(5, signal_strength):
         # Calculate signals for the last row
-        major = lele(value_one, signal_strength)
+        major = trend_reversal_signals(value_one, signal_strength)
 
         # Get indices of buy and sell signals
         buy_ind = get_major_indices(major, 1)
@@ -127,40 +127,20 @@ def volume_flow_indicator(df, length=130, coef=0.2, vcoef=2.5,
     """
     # Create a copy to avoid modifying input
     df = df.copy()
-
-    # Fill any NaN values in input with forward fill
     df[['high', 'low', 'close', 'volume']] = df[['high', 'low', 'close', 'volume']].fillna(method='ffill')
-
-    # Calculate typical price (HLC3)
     typical = (df['high'] + df['low'] + df['close']) / 3
-
-    # Calculate inter (log difference)
     inter = np.log(typical) - np.log(typical.shift(1))
     inter = inter.fillna(0)  # Fill initial NaN
-
-    # Calculate 30-period standard deviation
     vinter = inter.rolling(window=30, min_periods=1).std().fillna(0)
-
-    # Calculate cutoff
     cutoff = coef * vinter * df['close']
-
-    # Calculate volume average and max
     vave = df['volume'].rolling(window=length, min_periods=1).mean().shift(1).fillna(0)
     vmax = vave * vcoef
-
-    # Volume cutoff
     vc = np.where(df['volume'] < vmax, df['volume'], vmax)
-
-    # Money flow
     mf = typical - typical.shift(1)
     mf = mf.fillna(0)  # Fill initial NaN
-
-    # Volume contribution
     vcp = np.where(mf > cutoff, vc,
                    np.where(mf < -cutoff, -vc, 0))
     vcp = pd.Series(vcp, index=df.index).fillna(0)  # Ensure no NaN in vcp
-
-    # Calculate VFI
     vfi_raw = pd.Series(vcp).rolling(window=length, min_periods=1).sum() / vave
     vfi_raw = vfi_raw.replace([np.inf, -np.inf], 0).fillna(0)  # Handle division by zero
 
@@ -169,19 +149,13 @@ def volume_flow_indicator(df, length=130, coef=0.2, vcoef=2.5,
     else:
         vfi = vfi_raw
 
-    # Calculate EMA of VFI
     vfima = vfi.ewm(span=signal_length, adjust=False).mean()
-
-    # Calculate difference
     d = vfi - vfima
-
-    # Create result DataFrame
     result_df = pd.DataFrame({
         'vfi': vfi,
         'vfima': vfima,
         'd': d
     }, index=df.index)
-
     # Final NaN cleanup
     result_df = result_df.fillna(0)
 
