@@ -127,7 +127,7 @@ def volume_flow_indicator(df, length=130, coef=0.2, vcoef=2.5,
     """
     # Create a copy to avoid modifying input
     df = df.copy()
-    df[['high', 'low', 'close', 'volume']] = df[['high', 'low', 'close', 'volume']].fillna(method='ffill')
+    df[['high', 'low', 'close', 'volume']] = df[['high', 'low', 'close', 'volume']].ffill()
     typical = (df['high'] + df['low'] + df['close']) / 3
     inter = np.log(typical) - np.log(typical.shift(1))
     inter = inter.fillna(0)  # Fill initial NaN
@@ -160,6 +160,174 @@ def volume_flow_indicator(df, length=130, coef=0.2, vcoef=2.5,
     result_df = result_df.fillna(0)
 
     return result_df
+
+
+def ehlers_smoothed_adaptive_momentum(df, source='hl2', alpha=0.07, cutoff=8.0):
+    """
+    Calculate Ehlers Smoothed Adaptive Momentum from DataFrame
+
+    Parameters:
+    df: DataFrame with 'high', 'low', 'close' columns
+    source: 'hl2' or other price source (default 'hl2')
+    alpha: alpha parameter (default 0.07)
+    cutoff: cutoff parameter (default 8.0)
+
+    Returns:
+    DataFrame with 'f3' column containing the final indicator
+    """
+    df = df.copy()
+
+    # Calculate source
+    if source == 'hl2':
+        src = (df['high'] + df['low']) / 2
+    else:
+        src = df['close']
+
+    # Constants
+    pi = 4 * np.arctan(1.0)
+    dtr = pi / 180.0
+
+    # Calculate s (weighted moving average)
+    s = (src + 2 * src.shift(1).fillna(src) +
+         2 * src.shift(2).fillna(src) +
+         src.shift(3).fillna(src)) / 6.0
+
+    # Calculate c (second order filter)
+    c = pd.Series(np.zeros(len(df)), index=df.index)
+    c.iloc[0] = 0
+    c.iloc[1] = (src.iloc[1] - 2 * src.iloc[0] + src.iloc[0]) / 4.0 if len(df) > 1 else 0
+
+    for i in range(2, len(df)):
+        c.iloc[i] = ((1 - 0.5 * alpha) ** 2 *
+                     (s.iloc[i] - 2 * s.iloc[i - 1] + s.iloc[i - 2]) +
+                     2 * (1 - alpha) * c.iloc[i - 1] -
+                     (1 - alpha) ** 2 * c.iloc[i - 2])
+
+    # Calculate q1 and I1
+    ip = pd.Series(np.zeros(len(df)), index=df.index)
+    q1 = (0.0962 * c + 0.5769 * c.shift(2).fillna(0) -
+          0.5769 * c.shift(4).fillna(0) - 0.0962 * c.shift(6).fillna(0))
+    q1 = q1 * (0.5 + 0.08 * ip.shift(1))
+    I1 = c.shift(3).fillna(0)
+
+    # Calculate dp
+    dp_ = pd.Series(np.zeros(len(df)), index=df.index)
+    mask = (q1 != 0) & (q1.shift(1) != 0)
+    dp_.loc[mask] = ((I1 / q1 - I1.shift(1) / q1.shift(1)) /
+                     (1 + I1 * I1.shift(1) / (q1 * q1.shift(1))))[mask]
+    dp = np.where(dp_ < 0.1, 0.1, np.where(dp_ > 1.1, 1.1, dp_))
+
+    # Median filter
+    md = pd.concat([
+        pd.Series(dp, index=df.index),
+        pd.Series(dp, index=df.index).shift(1),
+        pd.concat([
+            pd.Series(dp, index=df.index).shift(2),
+            pd.Series(dp, index=df.index).shift(3),
+            pd.Series(dp, index=df.index).shift(4)
+        ], axis=1).median(axis=1)
+    ], axis=1).median(axis=1).fillna(0)
+
+    # Calculate periods
+    dc = np.where(md == 0, 15, 2 * pi / md + 0.5)
+    ip = 0.33 * dc + 0.67 * ip.shift(1).fillna(0)
+    # Initialize p before using it
+    p = pd.Series(np.zeros(len(df)), index=df.index)
+    for i in range(len(df)):
+        p.iloc[i] = 0.15 * ip.iloc[i] + 0.85 * (p.iloc[i - 1] if i > 0 else 0)
+    pr = np.round(np.abs(p - 1)).astype(int)
+
+    # Calculate velocity
+    v1 = pd.Series(np.zeros(len(df)), index=df.index)
+    for i in range(len(df)):
+        period = min(pr.iloc[i], 75)
+        if i >= period:
+            v1.iloc[i] = src.iloc[i] - src.iloc[i - period]
+
+    # Final filter coefficients
+    a1 = np.exp(-pi / cutoff)
+    b1 = 2.0 * a1 * np.cos((1.738 * 180 / cutoff) * dtr)
+    c1 = a1 * a1
+    coef2 = b1 + c1
+    coef3 = -(c1 + b1 * c1)
+    coef4 = c1 * c1
+    coef1 = 1 - coef2 - coef3 - coef4
+
+    # Calculate f3
+    f3 = pd.Series(np.zeros(len(df)), index=df.index)
+    f3.iloc[:3] = v1.iloc[:3]
+    for i in range(3, len(df)):
+        f3.iloc[i] = (coef1 * v1.iloc[i] +
+                      coef2 * f3.iloc[i - 1] +
+                      coef3 * f3.iloc[i - 2] +
+                      coef4 * f3.iloc[i - 3])
+    df['f3'] = f3
+
+    return df
+
+
+import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
+import pandas as pd
+
+
+def visualize_ehlers_computation(df, save_path="ehlers_computation.png"):
+    """
+    Visualize Ehlers Smoothed Adaptive Momentum computation values and save to a PNG.
+
+    Parameters:
+    df (DataFrame): Input DataFrame containing 'f3' and other computation columns, including 'timestamp'.
+    save_path (str): File path to save the plot as PNG (default is 'ehlers_computation.png').
+
+    Returns:
+    None: Saves the plot to the specified file.
+    """
+    # Convert 'timestamp' to datetime if it's not already datetime
+    if 'timestamp' in df.columns and not pd.api.types.is_datetime64_any_dtype(df['timestamp']):
+        df['timestamp'] = pd.to_datetime(df['timestamp'])
+
+    # Ensure 'timestamp' is used as the index
+    if 'timestamp' in df.columns:
+        df = df.set_index('timestamp')
+
+    plt.figure(figsize=(14, 8))
+    plt.grid(alpha=0.4)
+
+    # Plot second order filter (c)
+    if 'c' in df.columns:
+        plt.plot(df.index, df['c'], label='Second Order Filter (c)', color='green', alpha=0.7, linewidth=1)
+    else:
+        print("Column 'c' not found, skipping second order filter plot.")
+
+    # Plot q1
+    if 'q1' in df.columns:
+        plt.plot(df.index, df['q1'], label='q1', color='purple', alpha=0.7, linewidth=1)
+    else:
+        print("Column 'q1' not found, skipping q1 plot.")
+
+    # Plot final indicator (f3)
+    if 'f3' in df.columns:
+        plt.plot(df.index, df['f3'], label='Final Ehlers f3', color='red', alpha=0.8, linewidth=1.5)
+    else:
+        print("Column 'f3' not found, skipping final indicator plot.")
+
+    # Format X-axis: use dates from the 'timestamp' index
+    if isinstance(df.index, pd.DatetimeIndex):
+        plt.gca().xaxis.set_major_locator(mdates.AutoDateLocator())  # Automatically set the major ticks based on dates
+        plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))  # Format major ticks as 'YYYY-MM-DD'
+        plt.gca().xaxis.set_minor_locator(mdates.MonthLocator())  # Add minor ticks for each month
+        plt.gcf().autofmt_xdate()  # Auto-format dates to prevent overlap
+
+    # Add title and legend
+    plt.title("Ehlers Smoothed Adaptive Momentum Computation", fontsize=16)
+    plt.xlabel("Date", fontsize=12)
+    plt.ylabel("Value", fontsize=12)
+    plt.legend(fontsize=12)  # Automatically handles labels from plt.plot()
+
+    # Save to PNG
+    plt.tight_layout()
+    plt.savefig(save_path)
+    plt.show()
 
 
 
@@ -266,5 +434,7 @@ if __name__ == "__main__":
     last_1000_data = sample_data.tail(1000)  # Get the last 1000 rows
     # computed_df = tc_top_bottom_finder(last_1000_data)
     # visualize_results(computed_df)
-    vfi_data = volume_flow_indicator(last_1000_data)
-    visualize_vfi(vfi_data)
+    # vfi_data = volume_flow_indicator(last_1000_data)
+    # visualize_vfi(vfi_data)
+    ehlers_data = ehlers_smoothed_adaptive_momentum(last_1000_data)
+    visualize_ehlers_computation(ehlers_data)
