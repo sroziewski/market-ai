@@ -82,10 +82,15 @@ def calculate_indicators(klines_df):
     df['stoch_rsi_d'] = stoch_rsi_d  # %D line of Stochastic RSI (signal line)
 
     df = cycle_oscillator(df)
+    print("cycle_oscillator applied")
     df_tb = tc_top_bottom_finder(df)
+    print("tc_top_bottom_finder applied")
     df = generate_signal_label(df_tb)
+    print("generate_signal_label applied")
     df = one_hot_encode_column(df, 'signal_label')
+    print("one_hot_encode_column applied")
     df = volume_flow_indicator(df)
+    print("volume_flow_indicator applied")
 
     print("Finished calculating indicators.")
 
@@ -178,8 +183,6 @@ class HybridPriceRegressor(nn.Module):
 
     def prepare_data(self, klines_df):
         klines_df = calculate_indicators(klines_df)
-        # Assuming 'features' is defined elsewhere in your code
-        features = ['close', 'high', 'low', 'volume']  # Adjust as needed
         data = klines_df[features].values
         data_scaled = self.scaler_X.fit_transform(data)
         X = [data_scaled[i - self.lookback_period:i]
