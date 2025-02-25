@@ -13,7 +13,8 @@ from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm  # For progress bar support
 from multiprocessing import Pool, cpu_count
 
-from custom_indicators import cycle_oscillator, tc_top_bottom_finder, volume_flow_indicator, generate_signal_labels
+from custom_indicators import cycle_oscillator, tc_top_bottom_finder, volume_flow_indicator, generate_signal_label, \
+    one_hot_encode_column
 
 
 def process_batch(args):
@@ -79,9 +80,10 @@ def calculate_indicators(klines_df):
     df['stoch_rsi_k'] = stoch_rsi_k  # %K line of Stochastic RSI
     df['stoch_rsi_d'] = stoch_rsi_d  # %D line of Stochastic RSI (signal line)
 
-    df_cycle = cycle_oscillator(df)
-    df = generate_signal_labels(df_cycle)
-    df = tc_top_bottom_finder(df)
+    df = cycle_oscillator(df)
+    df_tb = tc_top_bottom_finder(df)
+    df = generate_signal_label(df_tb)
+    df = one_hot_encode_column(df, 'signal_label')
     df = volume_flow_indicator(df)
 
     return df.dropna()
@@ -155,6 +157,7 @@ class HybridPriceRegressor(nn.Module):
 
 
     def prepare_data(self, klines_df):
+        klines_df = calculate_indicators(klines_df)
         data = klines_df[['open', 'high', 'low', 'close']].values
         data_scaled = self.scaler_X.fit_transform(data)
         X = [data_scaled[i - self.lookback_period:i] for i in range(self.lookback_period, len(data))]

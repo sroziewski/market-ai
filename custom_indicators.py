@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
+from sklearn.preprocessing import OneHotEncoder
 
 
 def tc_top_bottom_finder(df, value_one=2, signal_strength=20):
@@ -109,7 +110,7 @@ def tc_top_bottom_finder(df, value_one=2, signal_strength=20):
     return df
 
 
-def generate_signal_labels(df):
+def generate_signal_label(df):
     """
     Generate labels for trading signals based on the output of tc_top_bottom_finder.
 
@@ -139,6 +140,45 @@ def generate_signal_labels(df):
 
     return df
 
+
+def one_hot_encode_column(df, column_name, drop_original=True):
+    """
+    One-hot encode a specified column in a DataFrame and optionally remove the original column.
+
+    Parameters:
+    - df: pandas.DataFrame
+        The input DataFrame containing the column to be one-hot encoded.
+    - column_name: str
+        The name of the column to one-hot encode.
+    - drop_original: bool, default True
+        If True, the original column will be removed from the DataFrame.
+
+    Returns:
+    - pandas.DataFrame
+        A modified DataFrame with the one-hot encoded columns added (and original column optionally removed).
+    """
+    # Ensure the column is treated as a string
+    df[column_name] = df[column_name].astype(str)  # Convert to string if not already
+
+    # Initialize the OneHotEncoder
+    one_hot_encoder = OneHotEncoder(sparse=False, handle_unknown='ignore')
+
+    # Perform one-hot encoding
+    one_hot_encoded_array = one_hot_encoder.fit_transform(df[[column_name]])
+
+    # Create a DataFrame for the one-hot encoded columns
+    onehot_df = pd.DataFrame(one_hot_encoded_array,
+                             columns=one_hot_encoder.get_feature_names_out([column_name]),
+                             index=df.index)  # Ensure indices match the original DataFrame
+
+    # Concatenate the original DataFrame with the one-hot encoded DataFrame
+    df = pd.concat([df, onehot_df], axis=1)
+
+    # Drop the original column if specified
+    if drop_original:
+        df = df.drop(columns=[column_name])
+
+    return df
 
 
 def volume_flow_indicator(df, length=130, coef=0.2, vcoef=2.5,
@@ -375,10 +415,11 @@ def cycle_oscillator(
     # Add Columns to DataFrame
     df['omed'] = omed
     df['oshort'] = oshort
-    df['omed_ob'] = omed_ob
-    df['omed_os'] = omed_os
-    df['oshort_ob'] = oshort_ob
-    df['oshort_os'] = oshort_os
+
+    df['omed_ob'] = omed_ob.notna().astype(int)
+    df['omed_os'] = omed_os.notna().astype(int)
+    df['oshort_ob'] = oshort_ob.notna().astype(int)
+    df['oshort_os'] = oshort_os.notna().astype(int)
 
     return df
 
