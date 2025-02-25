@@ -23,11 +23,10 @@ def tc_top_bottom_finder(df, ValueOne=2, Input=20):
         bindex = 0
         sindex = 0
 
-        # Initialize placeholders for buy/sell signals
         buy_signals = np.full(len(df), np.nan)
         sell_signals = np.full(len(df), np.nan)
 
-        for i in range(4, len(df)):  # Minimum index of 4 to avoid out-of-bounds issues
+        for i in range(4, len(df)):
             if df['close'].iloc[i] > df['close'].iloc[i - 4]:
                 bindex += 1
             else:
@@ -41,33 +40,36 @@ def tc_top_bottom_finder(df, ValueOne=2, Input=20):
             if (bindex > qual) and (df['close'].iloc[i] < df['open'].iloc[i]) and \
                     (df['high'].iloc[i] >= df['high'].iloc[i - length:i].max()):
                 bindex = 0
-                sell_signals[i] = df['high'].iloc[i]  # Signal for sell (bearish reversal)
+                sell_signals[i] = df['high'].iloc[i]
 
             if (sindex > qual) and (df['close'].iloc[i] > df['open'].iloc[i]) and \
                     (df['low'].iloc[i] <= df['low'].iloc[i - length:i].min()):
                 sindex = 0
-                buy_signals[i] = df['low'].iloc[i]  # Signal for buy (bullish reversal)
+                buy_signals[i] = df['low'].iloc[i]
 
         return buy_signals, sell_signals
+
+    # Copy the DataFrame explicitly to avoid modification of a slice.
+    df = df.copy()
 
     # Existing computations
     b_values = np.linspace(0.1, 0.95, 18)
     conjectures = [approximation(df['open'].values, b) for b in b_values]
-    df['tr'] = np.maximum.reduce([df['high'] - df['low'],
-                                  (df['high'] - nz(df['close'].shift(1))).abs(),
-                                  (df['low'] - nz(df['close'].shift(1))).abs()])
+    df.loc[:, 'tr'] = np.maximum.reduce([df['high'] - df['low'],
+                                         (df['high'] - nz(df['close'].shift(1))).abs(),
+                                         (df['low'] - nz(df['close'].shift(1))).abs()])
     inapproximability_terms = [approximation(df['tr'].values, b) for b in b_values]
-    df['inapproximability'] = np.mean(inapproximability_terms, axis=0)
-    df['amlag'] = np.mean(conjectures, axis=0)
-    df['upper_threshold_2'] = df['amlag'] + 2 * df['inapproximability'] * 1.618
-    df['lower_threshold_2'] = df['amlag'] - 2 * df['inapproximability'] * 1.618
-    df['crossdn'] = ((df['high'] < df['upper_threshold_2'].shift(1)) &
-                     (df['high'].shift(1) >= df['upper_threshold_2'].shift(1))).astype(int)
-    df['crossup'] = ((df['low'] > df['lower_threshold_2'].shift(1)) &
-                     (df['low'].shift(1) <= df['lower_threshold_2'].shift(1))).astype(int)
+    df.loc[:, 'inapproximability'] = np.mean(inapproximability_terms, axis=0)
+    df.loc[:, 'amlag'] = np.mean(conjectures, axis=0)
+    df.loc[:, 'upper_threshold_2'] = df['amlag'] + 2 * df['inapproximability'] * 1.618
+    df.loc[:, 'lower_threshold_2'] = df['amlag'] - 2 * df['inapproximability'] * 1.618
+    df.loc[:, 'crossdn'] = ((df['high'] < df['upper_threshold_2'].shift(1)) &
+                            (df['high'].shift(1) >= df['upper_threshold_2'].shift(1))).astype(int)
+    df.loc[:, 'crossup'] = ((df['low'] > df['lower_threshold_2'].shift(1)) &
+                            (df['low'].shift(1) <= df['lower_threshold_2'].shift(1))).astype(int)
 
-    # Add buy and sell signals
-    df["buy"], df["sell"] = lele(ValueOne, Input)  # Output major bullish/bearish reversals
+    # Use loc to assign buy and sell signals safely.
+    df.loc[:, "buy"], df.loc[:, "sell"] = lele(ValueOne, Input)
 
     return df
 
@@ -126,5 +128,6 @@ def visualize_results(df, output_file="output_plot.png"):
 
 if __name__ == "__main__":
     sample_data = pd.read_csv("/home/simon/data/my/crypto/klines/BTCUSDT/BTCUSDT_1d.csv")
-    computed_df = tc_top_bottom_finder(sample_data)
+    last_1000_data = sample_data.tail(1000)  # Get the last 1000 rows
+    computed_df = tc_top_bottom_finder(last_1000_data)
     visualize_results(computed_df)
