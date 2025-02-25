@@ -1,7 +1,8 @@
 import pandas as pd
 import talib
 
-from custom_indicators import cycle_oscillator, generate_signal_label, tc_top_bottom_finder, volume_flow_indicator
+from custom_indicators import cycle_oscillator, generate_signal_label, tc_top_bottom_finder, volume_flow_indicator, \
+    visualize_find_tb_results
 
 
 def calculate_indicators(klines_df):
@@ -41,13 +42,13 @@ def calculate_indicators(klines_df):
     df = generate_signal_label(df_tb)
     df = volume_flow_indicator(df)
 
-
-
     return df.dropna()
 
 
 if __name__ == "__main__":
     sample_data = pd.read_csv("/home/simon/data/my/crypto/klines/BTCUSDT/BTCUSDT_1d.csv")
-    last_1000_data = sample_data.tail(100)  # Get the last 1000 rows
+    last_1000_data = sample_data.tail(500)  # Get the last 1000 rows
+    df_tb = tc_top_bottom_finder(last_1000_data)
+    visualize_find_tb_results(df_tb)
     df = calculate_indicators(sample_data)
     i = 1

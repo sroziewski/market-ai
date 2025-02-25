@@ -1,26 +1,27 @@
+import matplotlib.dates as mdates
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
 from sklearn.preprocessing import OneHotEncoder
 
 
-def tc_top_bottom_finder(df, value_one=2, signal_strength=20):
+def approximation(a, b):
     def nz(series, default=0):
         return series.ffill().fillna(default)
 
-    def approximation(a, b):
-        l0 = np.zeros(len(a))
-        l1 = np.zeros(len(a))
-        l2 = np.zeros(len(a))
-        l3 = np.zeros(len(a))
-        for i in range(1, len(a)):
-            l0[i] = (1 - b) * a[i] + b * nz(pd.Series(l0))[i - 1]
-            l1[i] = -b * l0[i] + nz(pd.Series(l0))[i - 1] + b * nz(pd.Series(l1))[i - 1]
-            l2[i] = -b * l1[i] + nz(pd.Series(l1))[i - 1] + b * nz(pd.Series(l2))[i - 1]
-            l3[i] = -b * l2[i] + nz(pd.Series(l2))[i - 1] + b * nz(pd.Series(l3))[i - 1]
-        return (l0 + 2 * l1 + 2 * l2 + l3) / 6
+    l0 = np.zeros(len(a))
+    l1 = np.zeros(len(a))
+    l2 = np.zeros(len(a))
+    l3 = np.zeros(len(a))
+    for i in range(1, len(a)):
+        l0[i] = (1 - b) * a[i] + b * nz(pd.Series(l0))[i - 1]
+        l1[i] = -b * l0[i] + nz(pd.Series(l0))[i - 1] + b * nz(pd.Series(l1))[i - 1]
+        l2[i] = -b * l1[i] + nz(pd.Series(l1))[i - 1] + b * nz(pd.Series(l2))[i - 1]
+        l3[i] = -b * l2[i] + nz(pd.Series(l2))[i - 1] + b * nz(pd.Series(l3))[i - 1]
+    return (l0 + 2 * l1 + 2 * l2 + l3) / 6
 
+
+def tc_top_bottom_finder(df, value_one=2, signal_strength=20):
     def find_indices(_list_to_check, _item_to_find):
         _indices = []
         for _idx, _value in enumerate(_list_to_check):
@@ -86,9 +87,9 @@ def tc_top_bottom_finder(df, value_one=2, signal_strength=20):
     df.loc[:, 'upper_threshold_2'] = df['amlag'] + 2 * df['inapproximability'] * 1.618
     df.loc[:, 'lower_threshold_2'] = df['amlag'] - 2 * df['inapproximability'] * 1.618
     df.loc[:, 'sell_strong'] = ((df['high'] < df['upper_threshold_2'].shift(1)) &
-                            (df['high'].shift(1) >= df['upper_threshold_2'].shift(1))).astype(int)
+                                (df['high'].shift(1) >= df['upper_threshold_2'].shift(1))).astype(int)
     df.loc[:, 'buy_strong'] = ((df['low'] > df['lower_threshold_2'].shift(1)) &
-                            (df['low'].shift(1) <= df['lower_threshold_2'].shift(1))).astype(int)
+                               (df['low'].shift(1) <= df['lower_threshold_2'].shift(1))).astype(int)
 
     # Initialize signal columns with None
     df.loc[:, 'buy'] = None
@@ -182,7 +183,7 @@ def one_hot_encode_column(df, column_name, drop_original=True):
 
 
 def volume_flow_indicator(df, length=130, coef=0.2, vcoef=2.5,
-                     signal_length=5, smooth_vfi=False):
+                          signal_length=5, smooth_vfi=False):
     """
     Calculate Volume Flow Indicator (VFI) from a DataFrame with NaN handling
 
@@ -424,7 +425,6 @@ def cycle_oscillator(
     return df
 
 
-
 def visualize_cycle_oscillator(df, save_path="cycle_oscillator.png"):
     """
     Visualize the Cycle Oscillator (omed, oshort) along with Overbought (OB) and Oversold (OS) conditions.
@@ -474,7 +474,6 @@ def visualize_cycle_oscillator(df, save_path="cycle_oscillator.png"):
     # Save the plot as PNG
     plt.savefig(save_path)
     plt.show()
-
 
 
 def visualize_ehlers_computation(df, save_path="ehlers_computation.png"):
@@ -536,7 +535,6 @@ def visualize_ehlers_computation(df, save_path="ehlers_computation.png"):
     plt.show()
 
 
-
 def visualize_vfi(vfi_df, output_file="vfi_visualization.png"):
     """
     Visualize the computed Volume Flow Indicator (VFI) and its components.
@@ -582,8 +580,7 @@ def visualize_vfi(vfi_df, output_file="vfi_visualization.png"):
     plt.show()
 
 
-
-def visualize_results(df, output_file="output_plot.png"):
+def visualize_find_tb_results(df, output_file="output_plot.png"):
     # Plot the price (high and low), amlag (center line), and thresholds
     plt.figure(figsize=(12, 8))
 
