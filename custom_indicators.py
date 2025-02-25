@@ -109,6 +109,38 @@ def tc_top_bottom_finder(df, value_one=2, signal_strength=20):
     return df
 
 
+def generate_signal_labels(df):
+    """
+    Generate labels for trading signals based on the output of tc_top_bottom_finder.
+
+    Parameters:
+    df: DataFrame which includes columns ['buy', 'sell', 'buy_strong', 'sell_strong'].
+
+    Returns:
+    DataFrame with an additional 'signal_label' column containing:
+    - 'buy': For buy signals.
+    - 'sell': For sell signals.
+    - 'buy_strong': For strong buy signals.
+    - 'sell_strong': For strong sell signals.
+    - None: If no signal.
+
+    """
+    # Copy the DataFrame explicitly to avoid modifying the original
+    df = df.copy()
+
+    # Initialize the signal column as None
+    df['signal_label'] = None
+
+    # Assign labels based on conditions
+    df.loc[df['buy_strong'] == 1, 'signal_label'] = 'buy_strong'
+    df.loc[df['sell_strong'] == 1, 'signal_label'] = 'sell_strong'
+    df.loc[df['buy'].notna(), 'signal_label'] = 'buy'
+    df.loc[df['sell'].notna(), 'signal_label'] = 'sell'
+
+    return df
+
+
+
 def volume_flow_indicator(df, length=130, coef=0.2, vcoef=2.5,
                      signal_length=5, smooth_vfi=False):
     """

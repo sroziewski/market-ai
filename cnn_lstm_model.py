@@ -13,6 +13,8 @@ from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm  # For progress bar support
 from multiprocessing import Pool, cpu_count
 
+from custom_indicators import cycle_oscillator, tc_top_bottom_finder, volume_flow_indicator, generate_signal_labels
+
 
 def process_batch(args):
     """
@@ -45,7 +47,7 @@ def process_batch(args):
     return local_y
 
 
-def calculate_indicators(self, klines_df):
+def calculate_indicators(klines_df):
     """Calculate RSI and full MACD (Line, Signal, Histogram)"""
     df = klines_df.copy()
     if 'volume' not in df.columns:
@@ -76,6 +78,11 @@ def calculate_indicators(self, klines_df):
     )
     df['stoch_rsi_k'] = stoch_rsi_k  # %K line of Stochastic RSI
     df['stoch_rsi_d'] = stoch_rsi_d  # %D line of Stochastic RSI (signal line)
+
+    df_cycle = cycle_oscillator(df)
+    df = generate_signal_labels(df_cycle)
+    df = tc_top_bottom_finder(df)
+    df = volume_flow_indicator(df)
 
     return df.dropna()
 
