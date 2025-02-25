@@ -109,46 +109,130 @@ def tc_top_bottom_finder(df, value_one=2, signal_strength=20):
     return df
 
 
-def volume_flow_indicator(df, length=130, coef=0.2, vcoef=2.5, signal_length=5, smooth_vfi=False):
+def volume_flow_indicator(df, length=130, coef=0.2, vcoef=2.5,
+                     signal_length=5, smooth_vfi=False):
     """
-    Calculate the Volume Flow Indicator (VFI) by LazyBear.
+    Calculate Volume Flow Indicator (VFI) from a DataFrame with NaN handling
 
     Parameters:
-    df (pd.DataFrame): DataFrame with 'open', 'high', 'low', 'close', 'volume' columns
-    length (int): Lookback period for VFI calculation (default: 130)
-    coef (float): Coefficient for cutoff calculation (default: 0.2)
-    vcoef (float): Maximum volume cutoff multiplier (default: 2.5)
-    signal_length (int): Period for EMA signal line (default: 5)
-    smooth_vfi (bool): Whether to smooth VFI with an SMA (default: False)
+    df: DataFrame with columns 'high', 'low', 'close', 'volume'
+    length: lookback period (default 130)
+    coef: coefficient (default 0.2)
+    vcoef: max volume cutoff coefficient (default 2.5)
+    signal_length: signal line period (default 5)
+    smooth_vfi: whether to smooth VFI with SMA (default False)
 
     Returns:
-    pd.DataFrame: DataFrame with 'vfi', 'vfima' (EMA of VFI), and 'd' (difference) columns
+    DataFrame: with columns 'vfi', 'vfima', 'd'
     """
-    # Ensure input DataFrame has required columns
-    required_columns = ['open', 'high', 'low', 'close', 'volume']
-    if not all(col in df.columns for col in required_columns):
-        raise ValueError("DataFrame must contain 'open', 'high', 'low', 'close', 'volume' columns")
+    # Create a copy to avoid modifying input
+    df = df.copy()
 
+    # Fill any NaN values in input with forward fill
+    df[['high', 'low', 'close', 'volume']] = df[['high', 'low', 'close', 'volume']].fillna(method='ffill')
+
+    # Calculate typical price (HLC3)
     typical = (df['high'] + df['low'] + df['close']) / 3
+
+    # Calculate inter (log difference)
     inter = np.log(typical) - np.log(typical.shift(1))
-    vinter = inter.rolling(window=30).std()
+    inter = inter.fillna(0)  # Fill initial NaN
+
+    # Calculate 30-period standard deviation
+    vinter = inter.rolling(window=30, min_periods=1).std().fillna(0)
+
+    # Calculate cutoff
     cutoff = coef * vinter * df['close']
-    vave = talib.SMA(df['volume'], timeperiod=length).shift(1)
+
+    # Calculate volume average and max
+    vave = df['volume'].rolling(window=length, min_periods=1).mean().shift(1).fillna(0)
     vmax = vave * vcoef
+
+    # Volume cutoff
     vc = np.where(df['volume'] < vmax, df['volume'], vmax)
+
+    # Money flow
     mf = typical - typical.shift(1)
-    vcp = np.where(mf > cutoff, vc, np.where(mf < -cutoff, -vc, 0))
-    vfi_raw = talib.SMA(vcp, timeperiod=length) / vave
-    vfi = talib.SMA(vfi_raw, timeperiod=3) if smooth_vfi else vfi_raw
-    vfima = talib.EMA(vfi, timeperiod=signal_length)
+    mf = mf.fillna(0)  # Fill initial NaN
+
+    # Volume contribution
+    vcp = np.where(mf > cutoff, vc,
+                   np.where(mf < -cutoff, -vc, 0))
+    vcp = pd.Series(vcp, index=df.index).fillna(0)  # Ensure no NaN in vcp
+
+    # Calculate VFI
+    vfi_raw = pd.Series(vcp).rolling(window=length, min_periods=1).sum() / vave
+    vfi_raw = vfi_raw.replace([np.inf, -np.inf], 0).fillna(0)  # Handle division by zero
+
+    if smooth_vfi:
+        vfi = vfi_raw.rolling(window=3, min_periods=1).mean()
+    else:
+        vfi = vfi_raw
+
+    # Calculate EMA of VFI
+    vfima = vfi.ewm(span=signal_length, adjust=False).mean()
+
+    # Calculate difference
     d = vfi - vfima
-    result = pd.DataFrame({
+
+    # Create result DataFrame
+    result_df = pd.DataFrame({
         'vfi': vfi,
         'vfima': vfima,
         'd': d
     }, index=df.index)
 
-    return result
+    # Final NaN cleanup
+    result_df = result_df.fillna(0)
+
+    return result_df
+
+
+
+def visualize_vfi(vfi_df, output_file="vfi_visualization.png"):
+    """
+    Visualize the computed Volume Flow Indicator (VFI) and its components.
+
+    Parameters:
+    vfi_df (pd.DataFrame): DataFrame containing 'vfi', 'vfima', and 'd' columns.
+    output_file (str): File path to save the visualization (default: "vfi_visualization.png").
+    """
+    # Ensure required columns exist in the input DataFrame
+    required_columns = ['vfi', 'vfima', 'd']
+    if not all(col in vfi_df.columns for col in required_columns):
+        raise ValueError("The provided DataFrame must contain 'vfi', 'vfima', and 'd' columns.")
+
+    # Set up the figure
+    plt.figure(figsize=(14, 8))
+
+    # Check if the index is datetime-like, otherwise use numerical indices
+    if vfi_df.index.dtype.kind == 'M':  # If the index is datetime64
+        x_axis = vfi_df.index
+    else:
+        x_axis = range(len(vfi_df))  # Use numerical indices for the x-axis
+
+    # Plot the VFI and its signal line
+    plt.plot(x_axis, vfi_df['vfi'], label="VFI (Volume Flow Indicator)", color="blue", alpha=0.7)
+    plt.plot(x_axis, vfi_df['vfima'], label="VFI Signal Line (EMA)", color="orange", linestyle="--", alpha=0.9)
+
+    # Plot the difference bands (d)
+    plt.fill_between(x_axis, vfi_df['d'], 0, where=(vfi_df['d'] > 0),
+                     color='green', alpha=0.4, interpolate=True, label="VFI > EMA (Positive)")
+    plt.fill_between(x_axis, vfi_df['d'], 0, where=(vfi_df['d'] <= 0),
+                     color='red', alpha=0.4, interpolate=True, label="VFI <= EMA (Negative)")
+
+    # Add title, labels, grid, and legend
+    plt.grid(alpha=0.3)
+    plt.title("Volume Flow Indicator (VFI) Visualization", fontsize=16)
+    plt.xlabel("Index" if vfi_df.index.dtype.kind != 'M' else "Date/Time", fontsize=12)
+    plt.ylabel("VFI Value", fontsize=12)
+    plt.legend(loc="best", fontsize=10)
+
+    # Save and show the plot
+    plt.tight_layout()
+    plt.savefig(output_file, dpi=300)
+    plt.show()
+
 
 
 def visualize_results(df, output_file="output_plot.png"):
@@ -206,5 +290,7 @@ def visualize_results(df, output_file="output_plot.png"):
 if __name__ == "__main__":
     sample_data = pd.read_csv("/home/simon/data/my/crypto/klines/BTCUSDT/BTCUSDT_1d.csv")
     last_1000_data = sample_data.tail(1000)  # Get the last 1000 rows
-    computed_df = tc_top_bottom_finder(last_1000_data)
-    visualize_results(computed_df)
+    # computed_df = tc_top_bottom_finder(last_1000_data)
+    # visualize_results(computed_df)
+    vfi_data = volume_flow_indicator(last_1000_data)
+    visualize_vfi(vfi_data)
