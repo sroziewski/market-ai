@@ -266,112 +266,127 @@ def ehlers_smoothed_adaptive_momentum(df, source='hl2', alpha=0.07, cutoff=8.0):
     return df
 
 
-def cycle_oscillator(df, short_cycle_length=10, medium_cycle_length=30,
-                     short_cycle_multiplier=1.0, medium_cycle_multiplier=3.0,
-                     source='close'):
+def cycle_oscillator(
+        df,
+        scl_t=10,
+        mcl_t=30,
+        scm=1.0,
+        mcm=3.0
+):
     """
-    Calculate Cycle Oscillator from DataFrame
+    Calculate Cycle Oscillator values using pandas DataFrame.
 
     Parameters:
-    df: DataFrame with 'high', 'low', 'close' columns
-    short_cycle_length: Short cycle period (default 10)
-    medium_cycle_length: Medium cycle period (default 30)
-    short_cycle_multiplier: Short cycle multiplier (default 1.0)
-    medium_cycle_multiplier: Medium cycle multiplier (default 3.0)
-    source: Price source column (default 'close')
+    df: DataFrame with 'high', 'low', and 'close' columns
+    scl_t: Short Cycle Length (default 10)
+    mcl_t: Medium Cycle Length (default 30)
+    scm: Short Cycle Multiplier (default 1.0)
+    mcm: Medium Cycle Multiplier (default 3.0)
 
     Returns:
-    DataFrame with 'omed' and 'oshort' columns
+    DataFrame with additional columns: 'omed' and 'oshort'.
     """
     df = df.copy()
 
-    # Select source
-    src = df[source]
+    # Required columns check
+    if not {'close', 'high', 'low'}.issubset(df.columns):
+        raise ValueError("DataFrame must contain 'close', 'high', and 'low' columns.")
 
-    # Calculate cycle lengths
-    scl = short_cycle_length / 2
-    mcl = medium_cycle_length / 2
+    # Calculations
+    scl = scl_t / 2.0
+    mcl = mcl_t / 2.0
 
-    # Calculate running moving averages (RMA is EMA-style in Pine Script)
-    # Pine Script's rma uses alpha = 1/period
-    ma_scl = src.ewm(span=scl, adjust=False).mean()
-    ma_mcl = src.ewm(span=mcl, adjust=False).mean()
+    # Running Moving Average (RMA equivalent to EMA style in Pine Script)
+    ma_scl = df['close'].ewm(span=scl, adjust=False).mean()
+    ma_mcl = df['close'].ewm(span=mcl, adjust=False).mean()
 
-    # Calculate ATR for offsets
-    # ATR needs high, low, close
-    atr_scl = pd.Series(index=df.index, dtype=float)
-    atr_mcl = pd.Series(index=df.index, dtype=float)
-
-    # Calculate TR (true range)
+    # ATR Calculation
     tr = pd.concat([
-        (df['high'] - df['low']),
+        df['high'] - df['low'],
         (df['high'] - df['close'].shift(1)).abs(),
         (df['low'] - df['close'].shift(1)).abs()
     ], axis=1).max(axis=1)
-
-    # Calculate ATR using RMA
     atr_scl = tr.ewm(span=scl, adjust=False).mean()
     atr_mcl = tr.ewm(span=mcl, adjust=False).mean()
 
-    # Calculate offsets
-    scm_off = short_cycle_multiplier * atr_scl
-    mcm_off = medium_cycle_multiplier * atr_mcl
+    # Offsets
+    scm_off = scm * atr_scl
+    mcm_off = mcm * atr_mcl
 
-    # Half cycle lengths for lookback
+    # Cycle shifts (half of the cycle lengths)
     scl_2 = int(scl / 2)
     mcl_2 = int(mcl / 2)
 
-    # Calculate tops and bottoms
-    # nz(x, y) in Pine Script means use x if not NaN, else y
-    sct = ma_scl.shift(scl_2).fillna(src) + scm_off
-    scb = ma_scl.shift(scl_2).fillna(src) - scm_off
-    mct = ma_mcl.shift(mcl_2).fillna(src) + mcm_off
-    mcb = ma_mcl.shift(mcl_2).fillna(src) - mcm_off
+    # Short and Medium Cycle Tops and Bottoms
+    sct = ma_scl.shift(scl_2).fillna(df['close']) + scm_off
+    scb = ma_scl.shift(scl_2).fillna(df['close']) - scm_off
+    mct = ma_mcl.shift(mcl_2).fillna(df['close']) + mcm_off
+    mcb = ma_mcl.shift(mcl_2).fillna(df['close']) - mcm_off
 
-    # Calculate scmm (average of short cycle top and bottom)
+    # Average of short cycle top and bottom
     scmm = (sct + scb) / 2
 
-    # Calculate oscillators
+    # Oscillators
     omed = (scmm - mcb) / (mct - mcb)
-    oshort = (src - mcb) / (mct - mcb)
+    oshort = (df['close'] - mcb) / (mct - mcb)
 
-    # Handle potential division by zero
+    # Handle division by zero or infinite values
     omed = omed.replace([np.inf, -np.inf], 0).fillna(0)
     oshort = oshort.replace([np.inf, -np.inf], 0).fillna(0)
 
+    # Overbought/Oversold Conditions
+    omed_ob = omed.where(omed >= 1.0, np.nan)  # Medium Cycle Overbought
+    omed_os = omed.where(omed <= 0.0, np.nan)  # Medium Cycle Oversold
+    oshort_ob = oshort.where(oshort >= 1.0, np.nan)  # Short Cycle Overbought
+    oshort_os = oshort.where(oshort <= 0.0, np.nan)  # Short Cycle Oversold
+
+    # Add Columns to DataFrame
     df['omed'] = omed
     df['oshort'] = oshort
+    df['omed_ob'] = omed_ob
+    df['omed_os'] = omed_os
+    df['oshort_ob'] = oshort_ob
+    df['oshort_os'] = oshort_os
 
     return df
 
 
+
 def visualize_cycle_oscillator(df, save_path="cycle_oscillator.png"):
     """
-    Visualize the Cycle Oscillator (omed and oshort) and save plot as a PNG file.
+    Visualize the Cycle Oscillator (omed, oshort) along with Overbought (OB) and Oversold (OS) conditions.
 
     Parameters:
-    df: DataFrame that includes columns 'omed', 'oshort', and potentially a 'timestamp' or index for the x-axis.
+    df: DataFrame that includes columns 'omed', 'oshort', 'omed_ob', 'omed_os', 'oshort_ob', 'oshort_os'.
     save_path: Path to save the plot as a PNG file.
 
     Returns:
-    None: The plot is saved as a file.
+    None. The plot is saved as a file.
     """
-    # Check if the required columns exist
-    if 'omed' not in df.columns or 'oshort' not in df.columns:
-        raise ValueError("DataFrame must contain 'omed' and 'oshort' columns for the Cycle Oscillator.")
+    # Check for required columns
+    required_columns = ['omed', 'oshort', 'omed_ob', 'omed_os', 'oshort_ob', 'oshort_os']
+    for col in required_columns:
+        if col not in df.columns:
+            raise ValueError(f"DataFrame must contain column '{col}'.")
 
-    # Set up the figure
+    # Set up the plot
     plt.figure(figsize=(14, 8))
 
-    # Plot omed (cycle oscillator medium) with its label
+    # Plot omed and oshort lines
     plt.plot(df.index, df['omed'], label='Omed (Medium Cycle Oscillator)', color='blue', linewidth=1.5)
-
-    # Plot oshort (cycle oscillator short)
     plt.plot(df.index, df['oshort'], label='Oshort (Short Cycle Oscillator)', color='orange', linewidth=1.5)
+
+    # Plot histograms for omed overbought (OB) and oversold (OS) conditions
+    plt.bar(df.index, df['omed_ob'], width=1, color='purple', alpha=0.5, label='Omed OB (Medium Overbought)')
+    plt.bar(df.index, df['omed_os'], width=1, color='purple', alpha=0.5, label='Omed OS (Medium Oversold)')
+
+    # Plot histograms for oshort overbought (OB) and oversold (OS) conditions
+    plt.bar(df.index, df['oshort_ob'], width=1, color='green', alpha=0.5, label='Oshort OB (Short Overbought)')
+    plt.bar(df.index, df['oshort_os'], width=1, color='red', alpha=0.5, label='Oshort OS (Short Oversold)')
 
     # Add grid, title, and legend
     plt.grid(alpha=0.3)
-    plt.title("Cycle Oscillator Visualization", fontsize=16)
+    plt.title("Cycle Oscillator with Overbought and Oversold Conditions", fontsize=16)
     plt.xlabel("Index (or Timestamp)", fontsize=12)
     plt.ylabel("Oscillator Values", fontsize=12)
     plt.legend(fontsize=12)
@@ -380,10 +395,10 @@ def visualize_cycle_oscillator(df, save_path="cycle_oscillator.png"):
     if isinstance(df.index, pd.DatetimeIndex):  # If x-axis is datetime, format it
         plt.gcf().autofmt_xdate()
 
-    # Tight layout to ensure elements fit
+    # Tight layout to ensure elements fit well
     plt.tight_layout()
 
-    # Save plot as PNG
+    # Save the plot as PNG
     plt.savefig(save_path)
     plt.show()
 
@@ -549,7 +564,7 @@ def visualize_results(df, output_file="output_plot.png"):
 
 if __name__ == "__main__":
     sample_data = pd.read_csv("/home/simon/data/my/crypto/klines/BTCUSDT/BTCUSDT_1d.csv")
-    last_1000_data = sample_data.tail(200)  # Get the last 1000 rows
+    last_1000_data = sample_data.tail(1000)  # Get the last 1000 rows
     # computed_df = tc_top_bottom_finder(last_1000_data)
     # visualize_results(computed_df)
     # vfi_data = volume_flow_indicator(last_1000_data)
