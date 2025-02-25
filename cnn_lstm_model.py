@@ -318,13 +318,17 @@ if __name__ == "__main__":
 
     sample_data = pd.read_csv("/raid/sroziewski/data/crypto/klines/BTCUSDT/BTCUSDT_15m.csv")
 
-    regressor = HybridPriceRegressor(lookback_period=50, input_features=len(features))
-    regressor.train_model(sample_data, batch_size=32, validation_split=0.2, patience=10)
+    train_size = int(0.8 * len(sample_data))
+    train_df = sample_data[:train_size]
+    test_df = sample_data[train_size:]
 
-    predictions = regressor.predict(sample_data)
+    regressor = HybridPriceRegressor(lookback_period=50, input_features=len(features))
+    regressor.train_model(train_df, batch_size=64, validation_split=0.2, patience=10)
+
+    predictions = regressor.predict(test_df)
     print("Sample predictions (first 5):")
-    for i, pred in enumerate(predictions[:5]):
+    for i, pred in enumerate(predictions[:500]):
         print(f"Prediction {i + 1}: {pred}")
 
-    loss, mae = regressor.evaluate(sample_data)
+    loss, mae = regressor.evaluate(test_df)
     print(f"Evaluation Loss (MSE): {loss:.4f}, MAE: {mae:.4f}")
