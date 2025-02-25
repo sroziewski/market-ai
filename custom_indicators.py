@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import talib
 
 
 def tc_top_bottom_finder(df, value_one=2, signal_strength=20):
@@ -106,6 +107,48 @@ def tc_top_bottom_finder(df, value_one=2, signal_strength=20):
         df.iloc[sell_ind, df.columns.get_loc('sell')] = df.iloc[sell_ind, df.columns.get_loc('close')]
 
     return df
+
+
+def volume_flow_indicator(df, length=130, coef=0.2, vcoef=2.5, signal_length=5, smooth_vfi=False):
+    """
+    Calculate the Volume Flow Indicator (VFI) by LazyBear.
+
+    Parameters:
+    df (pd.DataFrame): DataFrame with 'open', 'high', 'low', 'close', 'volume' columns
+    length (int): Lookback period for VFI calculation (default: 130)
+    coef (float): Coefficient for cutoff calculation (default: 0.2)
+    vcoef (float): Maximum volume cutoff multiplier (default: 2.5)
+    signal_length (int): Period for EMA signal line (default: 5)
+    smooth_vfi (bool): Whether to smooth VFI with an SMA (default: False)
+
+    Returns:
+    pd.DataFrame: DataFrame with 'vfi', 'vfima' (EMA of VFI), and 'd' (difference) columns
+    """
+    # Ensure input DataFrame has required columns
+    required_columns = ['open', 'high', 'low', 'close', 'volume']
+    if not all(col in df.columns for col in required_columns):
+        raise ValueError("DataFrame must contain 'open', 'high', 'low', 'close', 'volume' columns")
+
+    typical = (df['high'] + df['low'] + df['close']) / 3
+    inter = np.log(typical) - np.log(typical.shift(1))
+    vinter = inter.rolling(window=30).std()
+    cutoff = coef * vinter * df['close']
+    vave = talib.SMA(df['volume'], timeperiod=length).shift(1)
+    vmax = vave * vcoef
+    vc = np.where(df['volume'] < vmax, df['volume'], vmax)
+    mf = typical - typical.shift(1)
+    vcp = np.where(mf > cutoff, vc, np.where(mf < -cutoff, -vc, 0))
+    vfi_raw = talib.SMA(vcp, timeperiod=length) / vave
+    vfi = talib.SMA(vfi_raw, timeperiod=3) if smooth_vfi else vfi_raw
+    vfima = talib.EMA(vfi, timeperiod=signal_length)
+    d = vfi - vfima
+    result = pd.DataFrame({
+        'vfi': vfi,
+        'vfima': vfima,
+        'd': d
+    }, index=df.index)
+
+    return result
 
 
 def visualize_results(df, output_file="output_plot.png"):
