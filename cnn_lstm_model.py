@@ -4,6 +4,7 @@ import pickle
 
 import numpy as np
 import pandas as pd
+import talib
 from sklearn.preprocessing import MinMaxScaler
 import torch
 import torch.nn as nn
@@ -42,6 +43,42 @@ def process_batch(args):
             np.mean(close_prices[window_50])
         ])
     return local_y
+
+
+def calculate_indicators(self, klines_df):
+    """Calculate RSI and full MACD (Line, Signal, Histogram)"""
+    df = klines_df.copy()
+    if 'volume' not in df.columns:
+        raise ValueError("Volume data is required in the input DataFrame")
+
+    # RSI
+    delta = df['close'].diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+    rs = gain / loss
+    df['rsi'] = 100 - (100 / (1 + rs))
+
+    # MACD: Line, Signal, Histogram
+    ema12 = df['close'].ewm(span=12, adjust=False).mean()
+    ema26 = df['close'].ewm(span=26, adjust=False).mean()
+    df['macd_line'] = ema12 - ema26
+    df['macd_signal'] = df['macd_line'].ewm(span=9, adjust=False).mean()
+    df['macd_histogram'] = df['macd_line'] - df['macd_signal']
+
+    # Stochastic RSI
+    rsi = df['rsi'].values
+    stoch_rsi_k, stoch_rsi_d = talib.STOCHRSI(
+        rsi,
+        timeperiod=14,  # 14-period window
+        fastk_period=3,  # %K line smoothing
+        fastd_period=3,  # %D line smoothing
+        fastd_matype=0  # Exponential moving average for %D
+    )
+    df['stoch_rsi_k'] = stoch_rsi_k  # %K line of Stochastic RSI
+    df['stoch_rsi_d'] = stoch_rsi_d  # %D line of Stochastic RSI (signal line)
+
+    return df.dropna()
+
 
 # Custom Dataset for Price Data
 class PriceDataset(Dataset):
@@ -108,6 +145,7 @@ class HybridPriceRegressor(nn.Module):
         x = self.dropout2(x)
         x = self.fc3(x)  # Final output
         return x
+
 
     def prepare_data(self, klines_df):
         data = klines_df[['open', 'high', 'low', 'close']].values

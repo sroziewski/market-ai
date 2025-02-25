@@ -266,6 +266,129 @@ def ehlers_smoothed_adaptive_momentum(df, source='hl2', alpha=0.07, cutoff=8.0):
     return df
 
 
+def cycle_oscillator(df, short_cycle_length=10, medium_cycle_length=30,
+                     short_cycle_multiplier=1.0, medium_cycle_multiplier=3.0,
+                     source='close'):
+    """
+    Calculate Cycle Oscillator from DataFrame
+
+    Parameters:
+    df: DataFrame with 'high', 'low', 'close' columns
+    short_cycle_length: Short cycle period (default 10)
+    medium_cycle_length: Medium cycle period (default 30)
+    short_cycle_multiplier: Short cycle multiplier (default 1.0)
+    medium_cycle_multiplier: Medium cycle multiplier (default 3.0)
+    source: Price source column (default 'close')
+
+    Returns:
+    DataFrame with 'omed' and 'oshort' columns
+    """
+    df = df.copy()
+
+    # Select source
+    src = df[source]
+
+    # Calculate cycle lengths
+    scl = short_cycle_length / 2
+    mcl = medium_cycle_length / 2
+
+    # Calculate running moving averages (RMA is EMA-style in Pine Script)
+    # Pine Script's rma uses alpha = 1/period
+    ma_scl = src.ewm(span=scl, adjust=False).mean()
+    ma_mcl = src.ewm(span=mcl, adjust=False).mean()
+
+    # Calculate ATR for offsets
+    # ATR needs high, low, close
+    atr_scl = pd.Series(index=df.index, dtype=float)
+    atr_mcl = pd.Series(index=df.index, dtype=float)
+
+    # Calculate TR (true range)
+    tr = pd.concat([
+        (df['high'] - df['low']),
+        (df['high'] - df['close'].shift(1)).abs(),
+        (df['low'] - df['close'].shift(1)).abs()
+    ], axis=1).max(axis=1)
+
+    # Calculate ATR using RMA
+    atr_scl = tr.ewm(span=scl, adjust=False).mean()
+    atr_mcl = tr.ewm(span=mcl, adjust=False).mean()
+
+    # Calculate offsets
+    scm_off = short_cycle_multiplier * atr_scl
+    mcm_off = medium_cycle_multiplier * atr_mcl
+
+    # Half cycle lengths for lookback
+    scl_2 = int(scl / 2)
+    mcl_2 = int(mcl / 2)
+
+    # Calculate tops and bottoms
+    # nz(x, y) in Pine Script means use x if not NaN, else y
+    sct = ma_scl.shift(scl_2).fillna(src) + scm_off
+    scb = ma_scl.shift(scl_2).fillna(src) - scm_off
+    mct = ma_mcl.shift(mcl_2).fillna(src) + mcm_off
+    mcb = ma_mcl.shift(mcl_2).fillna(src) - mcm_off
+
+    # Calculate scmm (average of short cycle top and bottom)
+    scmm = (sct + scb) / 2
+
+    # Calculate oscillators
+    omed = (scmm - mcb) / (mct - mcb)
+    oshort = (src - mcb) / (mct - mcb)
+
+    # Handle potential division by zero
+    omed = omed.replace([np.inf, -np.inf], 0).fillna(0)
+    oshort = oshort.replace([np.inf, -np.inf], 0).fillna(0)
+
+    df['omed'] = omed
+    df['oshort'] = oshort
+
+    return df
+
+
+def visualize_cycle_oscillator(df, save_path="cycle_oscillator.png"):
+    """
+    Visualize the Cycle Oscillator (omed and oshort) and save plot as a PNG file.
+
+    Parameters:
+    df: DataFrame that includes columns 'omed', 'oshort', and potentially a 'timestamp' or index for the x-axis.
+    save_path: Path to save the plot as a PNG file.
+
+    Returns:
+    None: The plot is saved as a file.
+    """
+    # Check if the required columns exist
+    if 'omed' not in df.columns or 'oshort' not in df.columns:
+        raise ValueError("DataFrame must contain 'omed' and 'oshort' columns for the Cycle Oscillator.")
+
+    # Set up the figure
+    plt.figure(figsize=(14, 8))
+
+    # Plot omed (cycle oscillator medium) with its label
+    plt.plot(df.index, df['omed'], label='Omed (Medium Cycle Oscillator)', color='blue', linewidth=1.5)
+
+    # Plot oshort (cycle oscillator short)
+    plt.plot(df.index, df['oshort'], label='Oshort (Short Cycle Oscillator)', color='orange', linewidth=1.5)
+
+    # Add grid, title, and legend
+    plt.grid(alpha=0.3)
+    plt.title("Cycle Oscillator Visualization", fontsize=16)
+    plt.xlabel("Index (or Timestamp)", fontsize=12)
+    plt.ylabel("Oscillator Values", fontsize=12)
+    plt.legend(fontsize=12)
+
+    # Handle x-axis dates or indices
+    if isinstance(df.index, pd.DatetimeIndex):  # If x-axis is datetime, format it
+        plt.gcf().autofmt_xdate()
+
+    # Tight layout to ensure elements fit
+    plt.tight_layout()
+
+    # Save plot as PNG
+    plt.savefig(save_path)
+    plt.show()
+
+
+
 def visualize_ehlers_computation(df, save_path="ehlers_computation.png"):
     """
     Visualize Ehlers Smoothed Adaptive Momentum computation values and save to a PNG.
@@ -426,10 +549,12 @@ def visualize_results(df, output_file="output_plot.png"):
 
 if __name__ == "__main__":
     sample_data = pd.read_csv("/home/simon/data/my/crypto/klines/BTCUSDT/BTCUSDT_1d.csv")
-    last_1000_data = sample_data.tail(1000)  # Get the last 1000 rows
+    last_1000_data = sample_data.tail(200)  # Get the last 1000 rows
     # computed_df = tc_top_bottom_finder(last_1000_data)
     # visualize_results(computed_df)
     # vfi_data = volume_flow_indicator(last_1000_data)
     # visualize_vfi(vfi_data)
-    ehlers_data = ehlers_smoothed_adaptive_momentum(last_1000_data)
-    visualize_ehlers_computation(ehlers_data)
+    # ehlers_data = ehlers_smoothed_adaptive_momentum(last_1000_data)
+    # visualize_ehlers_computation(ehlers_data)
+    cycle_oscillator_data = cycle_oscillator(last_1000_data)
+    visualize_cycle_oscillator(cycle_oscillator_data)
