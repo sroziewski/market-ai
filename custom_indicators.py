@@ -36,7 +36,7 @@ def tc_top_bottom_finder(df):
     return df
 
 
-def visualize_results(df):
+def visualize_results(df, output_file="output_plot.png"):
     # Plot the price (high and low), amlag (center line), and thresholds
     plt.figure(figsize=(12, 8))
 
@@ -68,7 +68,13 @@ def visualize_results(df):
     plt.ylabel('Price', fontsize=12)
     plt.legend(loc='best', fontsize=10)
     plt.tight_layout()
+
+    # Save the figure to a file
+    plt.savefig(output_file, dpi=300)  # Change dpi for higher resolution if needed
+
+    # Show the plot (optional)
     plt.show()
+
 
 
 if __name__ == "__main__":
