@@ -30,43 +30,44 @@ def tc_top_bottom_finder(df, value_one=2, signal_strength=20):
         #  the returned indices are precisely at the time of a buy/sell signal
         return find_indices(_data, _p)  # 1 BUY / -1 SELL
 
-    def lele(_val, _strength):
+    def lele(threshold_value, strength):
         n = len(df)
-        _bindex = np.zeros(n)
-        _sindex = np.zeros(n)
-        _ret = np.zeros(n)
+        bindex = np.zeros(n)
+        sindex = np.zeros(n)
+        result = np.zeros(n)
 
         for i in range(n):
-            # Maintain previous indices for _bindex and _sindex
+            # Maintain previous indices for bindex and sindex
             if i > 0:
-                _bindex[i] = _bindex[i - 1]
-                _sindex[i] = _sindex[i - 1]
+                bindex[i] = bindex[i - 1]
+                sindex[i] = sindex[i - 1]
 
-            # Update _bindex and _sindex based on the close condition
-            if i >= 4:  # Validate the 4-period condition
-                if df['close'][i] > df['close'][i - 4]:
-                    _bindex[i] += 1
-                elif df['close'][i] < df['close'][i - 4]:
-                    _sindex[i] += 1
+            # Ensure the 4-period index is valid
+            if i >= 4:
+                if df['close'].iloc[i] > df['close'].iloc[i - 4]:
+                    bindex[i] += 1
+                elif df['close'].iloc[i] < df['close'].iloc[i - 4]:
+                    sindex[i] += 1
 
-            # Check for conditions to reset indices and set return values
-            if i >= _strength:
-                max_high = np.max(df['high'][i - _strength:i])
-                min_low = np.min(df['low'][i - _strength:i])
+            # Ensure we have enough data for _strength periods before using slicing
+            if i >= strength:
+                max_high = np.max(df['high'].iloc[i - strength:i])
+                min_low = np.min(df['low'].iloc[i - strength:i])
 
-                if (_bindex[i] > _val
-                        and df['close'][i] < df['open'][i]
-                        and df['high'][i] >= max_high):
-                    _bindex[i] = 0
-                    _ret[i] = -1
+                # Check conditions for reset
+                if (bindex[i] > threshold_value
+                        and df['close'].iloc[i] < df['open'].iloc[i]
+                        and df['high'].iloc[i] >= max_high):
+                    bindex[i] = 0
+                    result[i] = -1
 
-                if (_sindex[i] > _val
-                        and df['close'][i] > df['open'][i]
-                        and df['low'][i] <= min_low):
-                    _sindex[i] = 0
-                    _ret[i] = 1
+                if (sindex[i] > threshold_value
+                        and df['close'].iloc[i] > df['open'].iloc[i]
+                        and df['low'].iloc[i] <= min_low):
+                    sindex[i] = 0
+                    result[i] = 1
 
-        return _ret
+        return result
 
     # Copy the DataFrame explicitly to avoid modification of a slice.
     df = df.copy()
@@ -82,9 +83,9 @@ def tc_top_bottom_finder(df, value_one=2, signal_strength=20):
     df.loc[:, 'amlag'] = np.mean(conjectures, axis=0)
     df.loc[:, 'upper_threshold_2'] = df['amlag'] + 2 * df['inapproximability'] * 1.618
     df.loc[:, 'lower_threshold_2'] = df['amlag'] - 2 * df['inapproximability'] * 1.618
-    df.loc[:, 'crossdn'] = ((df['high'] < df['upper_threshold_2'].shift(1)) &
+    df.loc[:, 'sell_strong'] = ((df['high'] < df['upper_threshold_2'].shift(1)) &
                             (df['high'].shift(1) >= df['upper_threshold_2'].shift(1))).astype(int)
-    df.loc[:, 'crossup'] = ((df['low'] > df['lower_threshold_2'].shift(1)) &
+    df.loc[:, 'buy_strong'] = ((df['low'] > df['lower_threshold_2'].shift(1)) &
                             (df['low'].shift(1) <= df['lower_threshold_2'].shift(1))).astype(int)
 
     # Initialize signal columns with None
@@ -97,12 +98,12 @@ def tc_top_bottom_finder(df, value_one=2, signal_strength=20):
         major = lele(value_one, signal_strength)
 
         # Get indices of buy and sell signals
-        _buy_ind = get_major_indices(major, 1)
-        _sell_ind = get_major_indices(major, -1)
+        buy_ind = get_major_indices(major, 1)
+        sell_ind = get_major_indices(major, -1)
 
-        # Assign current price (df['close']) to 'buy' and 'sell' signal columns
-        df.loc[_buy_ind, 'buy'] = df.loc[_buy_ind, 'close']
-        df.loc[_sell_ind, 'sell'] = df.loc[_sell_ind, 'close']
+        # Assign 'buy' and 'sell' signals using positional indexing with .iloc
+        df.iloc[buy_ind, df.columns.get_loc('buy')] = df.iloc[buy_ind, df.columns.get_loc('close')]
+        df.iloc[sell_ind, df.columns.get_loc('sell')] = df.iloc[sell_ind, df.columns.get_loc('close')]
 
     return df
 
@@ -122,26 +123,26 @@ def visualize_results(df, output_file="output_plot.png"):
 
     # Scatter crossup and crossdn signals
     plt.scatter(
-        df.index[df['crossup'] == 1],
-        df['low'][df['crossup'] == 1],
-        label='Crossup (Buy Signal)', color='green', marker='^', s=50
+        df.index[df['buy_strong'] == 1],
+        df['low'][df['buy_strong'] == 1],
+        label='Strong Buy Signal', color='green', marker='^', s=50
     )
     plt.scatter(
-        df.index[df['crossdn'] == 1],
-        df['high'][df['crossdn'] == 1],
-        label='Crossdn (Sell Signal)', color='red', marker='v', s=50
+        df.index[df['sell_strong'] == 1],
+        df['high'][df['sell_strong'] == 1],
+        label='Strong Sell Signal', color='red', marker='v', s=50
     )
 
     # Scatter buy and sell signals from lele
     plt.scatter(
         df.index[~df['buy'].isna()],
         df['buy'][~df['buy'].isna()],
-        label='Buy Signal (Bullish Reversal)', color='blue', marker='o', s=70
+        label='Buy Signal', color='blue', marker='o', s=70
     )
     plt.scatter(
         df.index[~df['sell'].isna()],
         df['sell'][~df['sell'].isna()],
-        label='Sell Signal (Bearish Reversal)', color='purple', marker='x', s=70
+        label='Sell Signal', color='purple', marker='x', s=70
     )
 
     # Add grid, legend, and labels
