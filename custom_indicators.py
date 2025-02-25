@@ -1,15 +1,97 @@
+from multiprocessing import Pool
+
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import OneHotEncoder
+from tqdm import tqdm
 
 
 def nz(series, default=0):
     return series.ffill().fillna(default)
 
 
-def approximation(a, b):
+def process_chunk(chunk_data):
+    """Process a single chunk with 10-point overlap on both sides, tracking full state."""
+    idx_start, idx_end, a_chunk, b, l0_prev, l1_prev, l2_prev, l3_prev = chunk_data
+
+    chunk_len = idx_end - idx_start
+    l0 = np.zeros(chunk_len)
+    l1 = np.zeros(chunk_len)
+    l2 = np.zeros(chunk_len)
+    l3 = np.zeros(chunk_len)
+
+    # Initialize with previous chunk’s state if available
+    if idx_start > 0 and all(x is not None for x in [l0_prev, l1_prev, l2_prev, l3_prev]):
+        l0[:10] = l0_prev[-10:] if len(l0_prev) >= 10 else l0_prev  # Use last 10 values or all if fewer
+        l1[:10] = l1_prev[-10:] if len(l1_prev) >= 10 else l1_prev
+        l2[:10] = l2_prev[-10:] if len(l2_prev) >= 10 else l2_prev
+        l3[:10] = l3_prev[-10:] if len(l3_prev) >= 10 else l3_prev
+    else:
+        l0[0] = (1 - b) * a_chunk[0]
+
+    # Compute the full chunk
+    for i in range(max(1, 10) if idx_start > 0 else 1, chunk_len):
+        l0[i] = (1 - b) * a_chunk[i] + b * nz(pd.Series(l0[:i]))[i - 1]
+        l1[i] = -b * l0[i] + nz(pd.Series(l0[:i]))[i - 1] + b * nz(pd.Series(l1[:i]))[i - 1]
+        l2[i] = -b * l1[i] + nz(pd.Series(l1[:i]))[i - 1] + b * nz(pd.Series(l2[:i]))[i - 1]
+        l3[i] = -b * l2[i] + nz(pd.Series(l2[:i]))[i - 1] + b * nz(pd.Series(l3[:i]))[i - 1]
+
+    result = (l0 + 2 * l1 + 2 * l2 + l3) / 6
+    return result, l0[-10:], l1[-10:], l2[-10:], l3[-10:]  # Return result and last 10 states for continuity
+
+
+def sew_boundaries(output, a, b, chunk_starts, chunk_ends, window=20):
+    """
+    Recompute values around chunk boundaries for perfect continuity with larger window.
+
+    Parameters:
+    output (np.ndarray): Initial parallel output
+    a (np.ndarray): Input series
+    b (float): Smoothing factor
+    chunk_starts (list): Start indices of chunks' core regions
+    chunk_ends (list): End indices of chunks' core regions
+    window (int): Points to recompute on each side (default 20)
+
+    Returns:
+    np.ndarray: Fully continuous output
+    """
+    n = len(a)
+    result = output.copy()
+    l0 = np.zeros(n)
+    l1 = np.zeros(n)
+    l2 = np.zeros(n)
+    l3 = np.zeros(n)
+
+    # Compute entire array sequentially, updating only boundary regions
+    for i in range(n):
+        if i == 0:
+            l0[i] = (1 - b) * a[i]
+        else:
+            l0[i] = (1 - b) * a[i] + b * l0[i - 1]
+            l1[i] = -b * l0[i] + l0[i - 1] + b * l1[i - 1]
+            l2[i] = -b * l1[i] + l1[i - 1] + b * l2[i - 1]
+            l3[i] = -b * l2[i] + l2[i - 1] + b * l3[i - 1]
+        computed = (l0[i] + 2 * l1[i] + 2 * l2[i] + l3[i]) / 6
+
+        # Update near start and end boundaries
+        update_needed = False
+        for start in chunk_starts[1:]:  # Skip first chunk start (0)
+            if start - window <= i < start + window:
+                update_needed = True
+                break
+        for end in chunk_ends[:-1]:  # Skip last chunk end (n)
+            if end - window <= i < end + window:
+                update_needed = True
+                break
+        if update_needed:
+            result[i] = computed
+
+    return result
+
+
+def approximation_sequential(a, b):
     l0 = np.zeros(len(a))
     l1 = np.zeros(len(a))
     l2 = np.zeros(len(a))
@@ -20,6 +102,74 @@ def approximation(a, b):
         l2[i] = -b * l1[i] + nz(pd.Series(l1))[i - 1] + b * nz(pd.Series(l2))[i - 1]
         l3[i] = -b * l2[i] + nz(pd.Series(l2))[i - 1] + b * nz(pd.Series(l3))[i - 1]
     return (l0 + 2 * l1 + 2 * l2 + l3) / 6
+
+
+def parallel_approximation(a, b, num_chunks=None, overlap=10):
+    """
+    Parallel implementation with enhanced state tracking and sewing for continuity.
+
+    Parameters:
+    a (np.ndarray): Input series
+    b (float): Smoothing factor
+    num_chunks (int): Number of chunks (defaults to CPU count if None)
+    overlap (int): Overlap size on each side (default 10, increased for robustness)
+
+    Returns:
+    np.ndarray: Approximated series
+    """
+    if not isinstance(a, np.ndarray):
+        a = np.array(a)
+
+    n = len(a)
+    if n == 0:
+        return np.array([])
+
+    if num_chunks is None:
+        num_chunks = 8
+    else:
+        num_chunks = int(num_chunks)
+
+    max_chunks = max(1, n // (2 * overlap + 1))
+    num_chunks = min(num_chunks, max_chunks)
+
+    chunk_size = (n - (num_chunks - 1) * (2 * overlap)) // num_chunks
+    if chunk_size <= 0:
+        return approximation_sequential(a, b)
+
+    chunks = []
+    chunk_starts = []
+    chunk_ends = []
+    l0_prev, l1_prev, l2_prev, l3_prev = None, None, None, None
+
+    # Prepare chunks with 10-point overlap
+    for i in range(num_chunks):
+        core_start = i * (chunk_size + 2 * overlap) if i > 0 else 0
+        core_end = core_start + chunk_size
+        start_idx = max(0, core_start - overlap)
+        end_idx = min(n, core_end + overlap)
+
+        a_chunk = a[start_idx:end_idx]
+        chunks.append((start_idx, end_idx, a_chunk, b, l0_prev, l1_prev, l2_prev, l3_prev))
+        chunk_starts.append(core_start)
+        chunk_ends.append(core_end)
+
+    # Process chunks in parallel
+    with Pool(num_chunks) as pool:
+        results = list(tqdm(pool.imap(process_chunk, chunks), total=num_chunks, desc="Processing Chunks"))
+
+    # Assemble initial results
+    output = np.zeros(n)
+    for i, (chunk_result, l0_end, l1_end, l2_end, l3_end) in enumerate(results):
+        core_start = chunk_starts[i]
+        core_end = chunk_ends[i]
+        overlap_left = overlap if i > 0 else 0
+        overlap_right = overlap if core_end + overlap < n else (n - core_end)
+        core_result = chunk_result[overlap_left:len(chunk_result) - overlap_right]
+        output[core_start:core_end] = core_result
+        l0_prev, l1_prev, l2_prev, l3_prev = l0_end, l1_end, l2_end, l3_end
+
+    # Sew boundaries with larger window
+    return sew_boundaries(output, a, b, chunk_starts, chunk_ends, window=20)
 
 
 def tc_top_bottom_finder(df, value_one=2, signal_strength=20):
@@ -78,11 +228,11 @@ def tc_top_bottom_finder(df, value_one=2, signal_strength=20):
 
     # Existing computations
     b_values = np.linspace(0.1, 0.95, 18)
-    conjectures = [approximation(df['open'].values, b) for b in b_values]
+    conjectures = [parallel_approximation(df['open'].values, b) for b in b_values]
     df.loc[:, 'tr'] = np.maximum.reduce([df['high'] - df['low'],
                                          (df['high'] - nz(df['close'].shift(1))).abs(),
                                          (df['low'] - nz(df['close'].shift(1))).abs()])
-    inapproximability_terms = [approximation(df['tr'].values, b) for b in b_values]
+    inapproximability_terms = [parallel_approximation(df['tr'].values, b) for b in b_values]
     df.loc[:, 'inapproximability'] = np.mean(inapproximability_terms, axis=0)
     df.loc[:, 'amlag'] = np.mean(conjectures, axis=0)
     df.loc[:, 'upper_threshold_2'] = df['amlag'] + 2 * df['inapproximability'] * 1.618
@@ -586,8 +736,7 @@ def visualize_find_tb_results(df, output_file="output_plot.png"):
     plt.figure(figsize=(12, 8))
 
     # Plot high and low prices
-    plt.plot(df.index, df['high'], label='High Price', color='blue', alpha=0.5)
-    plt.plot(df.index, df['low'], label='Low Price', color='orange', alpha=0.5)
+    plt.plot(df.index, df['close'], label='Close Price', color='blue', alpha=0.5)
 
     # Plot computed values
     plt.plot(df.index, df['amlag'], label='Amlag (Center Line)', color='green', linestyle='--', linewidth=1.5)
