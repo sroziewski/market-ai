@@ -49,6 +49,7 @@ def process_batch(args):
 
 
 def calculate_indicators(klines_df):
+    print("Calculating indicators...")
     """Calculate RSI and full MACD (Line, Signal, Histogram)"""
     df = klines_df.copy()
     if 'volume' not in df.columns:
@@ -85,6 +86,8 @@ def calculate_indicators(klines_df):
     df = generate_signal_label(df_tb)
     df = one_hot_encode_column(df, 'signal_label')
     df = volume_flow_indicator(df)
+
+    print("Finished calculating indicators.")
 
     return df.dropna()
 
