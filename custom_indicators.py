@@ -3,7 +3,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 
-def tc_top_bottom_finder(df):
+def tc_top_bottom_finder(df, ValueOne=2, Input=20):
     def nz(series, default=0):
         return series.ffill().fillna(default)
 
@@ -13,12 +13,44 @@ def tc_top_bottom_finder(df):
         l2 = np.zeros(len(a))
         l3 = np.zeros(len(a))
         for i in range(1, len(a)):
-            l0[i] = (1 - b) * a[i] + b * nz(pd.Series(l0))[i-1]
-            l1[i] = -b * l0[i] + nz(pd.Series(l0))[i-1] + b * nz(pd.Series(l1))[i-1]
-            l2[i] = -b * l1[i] + nz(pd.Series(l1))[i-1] + b * nz(pd.Series(l2))[i-1]
-            l3[i] = -b * l2[i] + nz(pd.Series(l2))[i-1] + b * nz(pd.Series(l3))[i-1]
-        return (l0 + 2*l1 + 2*l2 + l3) / 6
+            l0[i] = (1 - b) * a[i] + b * nz(pd.Series(l0))[i - 1]
+            l1[i] = -b * l0[i] + nz(pd.Series(l0))[i - 1] + b * nz(pd.Series(l1))[i - 1]
+            l2[i] = -b * l1[i] + nz(pd.Series(l1))[i - 1] + b * nz(pd.Series(l2))[i - 1]
+            l3[i] = -b * l2[i] + nz(pd.Series(l2))[i - 1] + b * nz(pd.Series(l3))[i - 1]
+        return (l0 + 2 * l1 + 2 * l2 + l3) / 6
 
+    def lele(qual, length):
+        bindex = 0
+        sindex = 0
+
+        # Initialize placeholders for buy/sell signals
+        buy_signals = np.full(len(df), np.nan)
+        sell_signals = np.full(len(df), np.nan)
+
+        for i in range(4, len(df)):  # Minimum index of 4 to avoid out-of-bounds issues
+            if df['close'].iloc[i] > df['close'].iloc[i - 4]:
+                bindex += 1
+            else:
+                bindex = nz(pd.Series([bindex - 1])).iloc[0]
+
+            if df['close'].iloc[i] < df['close'].iloc[i - 4]:
+                sindex += 1
+            else:
+                sindex = nz(pd.Series([sindex - 1])).iloc[0]
+
+            if (bindex > qual) and (df['close'].iloc[i] < df['open'].iloc[i]) and \
+                    (df['high'].iloc[i] >= df['high'].iloc[i - length:i].max()):
+                bindex = 0
+                sell_signals[i] = df['high'].iloc[i]  # Signal for sell (bearish reversal)
+
+            if (sindex > qual) and (df['close'].iloc[i] > df['open'].iloc[i]) and \
+                    (df['low'].iloc[i] <= df['low'].iloc[i - length:i].min()):
+                sindex = 0
+                buy_signals[i] = df['low'].iloc[i]  # Signal for buy (bullish reversal)
+
+        return buy_signals, sell_signals
+
+    # Existing computations
     b_values = np.linspace(0.1, 0.95, 18)
     conjectures = [approximation(df['open'].values, b) for b in b_values]
     df['tr'] = np.maximum.reduce([df['high'] - df['low'],
@@ -33,6 +65,10 @@ def tc_top_bottom_finder(df):
                      (df['high'].shift(1) >= df['upper_threshold_2'].shift(1))).astype(int)
     df['crossup'] = ((df['low'] > df['lower_threshold_2'].shift(1)) &
                      (df['low'].shift(1) <= df['lower_threshold_2'].shift(1))).astype(int)
+
+    # Add buy and sell signals
+    df["buy"], df["sell"] = lele(ValueOne, Input)  # Output major bullish/bearish reversals
+
     return df
 
 
@@ -49,7 +85,7 @@ def visualize_results(df, output_file="output_plot.png"):
     plt.plot(df.index, df['upper_threshold_2'], label='Upper Threshold', color='red', linestyle=':')
     plt.plot(df.index, df['lower_threshold_2'], label='Lower Threshold', color='magenta', linestyle=':')
 
-    # Scatter crossup and crossdn
+    # Scatter crossup and crossdn signals
     plt.scatter(
         df.index[df['crossup'] == 1],
         df['low'][df['crossup'] == 1],
@@ -61,9 +97,21 @@ def visualize_results(df, output_file="output_plot.png"):
         label='Crossdn (Sell Signal)', color='red', marker='v', s=50
     )
 
+    # Scatter buy and sell signals from lele
+    plt.scatter(
+        df.index[~df['buy'].isna()],
+        df['buy'][~df['buy'].isna()],
+        label='Buy Signal (Bullish Reversal)', color='blue', marker='o', s=70
+    )
+    plt.scatter(
+        df.index[~df['sell'].isna()],
+        df['sell'][~df['sell'].isna()],
+        label='Sell Signal (Bearish Reversal)', color='purple', marker='x', s=70
+    )
+
     # Add grid, legend, and labels
     plt.grid(alpha=0.3)
-    plt.title('Computed Thresholds and Price Movements', fontsize=14)
+    plt.title('Computed Thresholds, Signals, and Price Movements', fontsize=14)
     plt.xlabel('Index', fontsize=12)
     plt.ylabel('Price', fontsize=12)
     plt.legend(loc='best', fontsize=10)
@@ -74,7 +122,6 @@ def visualize_results(df, output_file="output_plot.png"):
 
     # Show the plot (optional)
     plt.show()
-
 
 
 if __name__ == "__main__":
