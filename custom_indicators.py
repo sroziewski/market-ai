@@ -375,15 +375,15 @@ def volume_flow_indicator(df, length=130, coef=0.2, vcoef=2.5,
 
     vfima = vfi.ewm(span=signal_length, adjust=False).mean()
     d = vfi - vfima
-    result_df = pd.DataFrame({
-        'vfi': vfi,
-        'vfima': vfima,
-        'd': d
-    }, index=df.index)
-    # Final NaN cleanup
-    result_df = result_df.fillna(0)
+    # Add the new columns directly to the existing DataFrame
+    df['vfi'] = vfi
+    df['vfima'] = vfima
+    df['d'] = d
 
-    return result_df
+    # Final NaN cleanup
+    df = df.fillna(0)
+
+    return df
 
 
 def ehlers_smoothed_adaptive_momentum(df, source='hl2', alpha=0.07, cutoff=8.0):
