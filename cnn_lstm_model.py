@@ -1,3 +1,4 @@
+import os
 from multiprocessing import Pool, cpu_count
 
 import numpy as np
@@ -16,7 +17,7 @@ lookback = 130  # as for the volume_flow_indicator computation
 
 def process_batch(args):
     """
-    Process a batch of rows to create labels for the given range.
+    Process a batch of rows to create percentage-based labels for the given range.
 
     Arguments:
         args (tuple): A tuple containing:
@@ -24,24 +25,51 @@ def process_batch(args):
             - low_prices (np.ndarray): Array of low prices
             - high_prices (np.ndarray): Array of high prices
             - close_prices (np.ndarray): Array of close prices
+            - open_prices (np.ndarray, optional): Array of open prices (if None, use close_prices as reference)
             - total_rows (int): Total number of rows in the dataset
 
     Returns:
-        list: A list of calculated labels for the rows in this batch
+        list: A list of percentage-based labels for the rows in this batch:
+              [min_low_20%, max_high_20%, mean_close_20%, min_low_50%, max_high_50%, mean_close_50%]
+              where percentages are relative to the current row's reference price (open or close).
     """
-    row_range, low_prices, high_prices, close_prices, total_rows = args
+    row_range, low_prices, high_prices, close_prices, open_prices, total_rows = args
     local_y = []
+    # Use open_prices as reference if provided, otherwise fall back to close_prices
+    reference_prices = open_prices if open_prices is not None else close_prices
+
     for i in row_range:
+        # Define windows for 20 and 50 rows, ensuring they don't exceed total_rows
         window_20 = slice(i, min(i + 20, total_rows))
         window_50 = slice(i, min(i + 50, total_rows))
+
+        # Current row's reference price (open or close at index i)
+        ref_price = reference_prices[i]
+
+        # Avoid division by zero by checking if ref_price is non-zero
+        if ref_price == 0:
+            # Append zeros or NaNs if reference price is zero to avoid undefined behavior
+            local_y.append([0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+            continue
+
+        # Calculate percentage changes relative to ref_price
+        min_low_20_pct = (np.min(low_prices[window_20]) - ref_price) / ref_price * 100
+        max_high_20_pct = (np.max(high_prices[window_20]) - ref_price) / ref_price * 100
+        mean_close_20_pct = (np.mean(close_prices[window_20]) - ref_price) / ref_price * 100
+        min_low_50_pct = (np.min(low_prices[window_50]) - ref_price) / ref_price * 100
+        max_high_50_pct = (np.max(high_prices[window_50]) - ref_price) / ref_price * 100
+        mean_close_50_pct = (np.mean(close_prices[window_50]) - ref_price) / ref_price * 100
+
+        # Append the percentage-based labels
         local_y.append([
-            np.min(low_prices[window_20]),
-            np.max(high_prices[window_20]),
-            np.mean(close_prices[window_20]),
-            np.min(low_prices[window_50]),
-            np.max(high_prices[window_50]),
-            np.mean(close_prices[window_50])
+            min_low_20_pct,
+            max_high_20_pct,
+            mean_close_20_pct,
+            min_low_50_pct,
+            max_high_50_pct,
+            mean_close_50_pct
         ])
+
     return local_y
 
 
@@ -71,8 +99,6 @@ class HybridPriceRegressor(nn.Module):
         self.lstm_units = lstm_units
         self.dropout_rate = dropout_rate
         self.attention_heads = attention_heads
-        self.scaler_X = MinMaxScaler()
-        self.scaler_y = MinMaxScaler()
 
         # Cache for labels
         self.cached_labels = None
@@ -130,17 +156,15 @@ class HybridPriceRegressor(nn.Module):
         return x
 
     def prepare_data(self, klines_df):
-        klines_df = calculate_indicators(klines_df)
         data = klines_df[features].values
-        data_scaled = self.scaler_X.fit_transform(data)
-        X = [data_scaled[i - self.lookback_period:i]
-             for i in range(self.lookback_period, len(data))]
-        return np.array(X), self.scaler_X
+        X = [data[i - self.lookback_period:i] for i in range(self.lookback_period, len(data))]
+        return np.array(X)
 
     def create_labels(self, klines_df, save_path=None):
         if self.cached_labels is not None:
             return self.cached_labels
 
+        open_prices = klines_df['open'].values
         close_prices = klines_df['close'].values
         high_prices = klines_df['high'].values
         low_prices = klines_df['low'].values
@@ -151,12 +175,11 @@ class HybridPriceRegressor(nn.Module):
         chunk_size = len(indices) // num_cores
         chunks = [indices[i:i + chunk_size] for i in range(0, len(indices), chunk_size)]
 
-        args = [(chunk, low_prices, high_prices, close_prices, total_rows)
+        args = [(chunk, low_prices, high_prices, close_prices, open_prices, total_rows)
                 for chunk in chunks]
 
         with Pool(num_cores) as pool:
-            results = list(tqdm(pool.imap(process_batch, args),
-                                total=len(chunks), desc="Creating Labels"))
+            results = list(tqdm(pool.imap(process_batch, args), total=len(chunks), desc="Creating Labels"))
 
         y = [label for batch in results for label in batch]
         y_scaled = self.scaler_y.fit_transform(np.array(y))
@@ -270,17 +293,23 @@ if __name__ == "__main__":
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     print(f"Using device: {device}")
 
-    sample_data = pd.read_csv("/raid/sroziewski/data/crypto/klines/BTCUSDT/BTCUSDT_15m.csv")
+    BASE_DIR = os.getenv("BASE_DIR")
+    file_path = f"{BASE_DIR}/data/crypto/klines/BTCUSDT/BTCUSDT_15m.csv"
+    sample_data = pd.read_csv(file_path)
+    df_features = calculate_indicators(sample_data)
 
-    train_size = int(0.8 * len(sample_data))
-    train_df = sample_data[:train_size]
-    test_df = sample_data[train_size:]
+    scaler_X = MinMaxScaler()
+    df_features = scaler_X.fit_transform(df_features)
+
+    train_size = int(0.8 * len(df_features))
+    train_df = df_features[:train_size]
+    test_df = df_features[train_size:]
 
     regressor = HybridPriceRegressor(lookback_period=50, input_features=len(features))
     regressor.train_model(train_df, batch_size=64, validation_split=0.2, patience=10)
 
     predictions = regressor.predict(test_df)
-    print("Sample predictions (first 5):")
+    print("Sample predictions (first 500):")
     for i, pred in enumerate(predictions[:500]):
         print(f"Prediction {i + 1}: {pred}")
 

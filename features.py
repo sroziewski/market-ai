@@ -119,6 +119,7 @@ if __name__ == "__main__":
     train_size = int(0.8 * len(df_features))
     train_df = df_features[:train_size]
     test_df = df_features[train_size:]
+
     visualize_cycle_oscillator(df_features)
     visualize_vfi(df_features)
     i = 1
