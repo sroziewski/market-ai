@@ -35,7 +35,7 @@ def process_batch(args):
               [min_low_20%, max_high_20%, mean_close_20%, min_low_50%, max_high_50%, mean_close_50%]
               where percentages are relative to the current row's reference price (open or close).
     """
-    row_range, low_prices, high_prices, close_prices, open_prices, total_rows = args
+    row_range, low_prices, high_prices, open_prices, close_prices, open_prices, total_rows = args
     local_y = []
     # Use open_prices as reference if provided, otherwise fall back to close_prices
     reference_prices = open_prices if open_prices is not None else close_prices
@@ -168,6 +168,7 @@ class HybridPriceRegressor(nn.Module):
         if self.cached_labels is not None:
             return self.cached_labels
 
+        open_prices = klines_df['open'].values
         close_prices = klines_df['close'].values
         high_prices = klines_df['high'].values
         low_prices = klines_df['low'].values
@@ -180,7 +181,7 @@ class HybridPriceRegressor(nn.Module):
         chunks = [indices[i:i + chunk_size] for i in range(0, len(indices), chunk_size)]
 
         # Prepare arguments for `process_batch`
-        args = [(chunk, low_prices, high_prices, close_prices, total_rows) for chunk in chunks]
+        args = [(chunk, low_prices, high_prices, open_prices, close_prices, total_rows) for chunk in chunks]
 
         # Use Pool to process in parallel
         with Pool(num_cores) as pool:
@@ -341,4 +342,4 @@ if __name__ == "__main__":
 
     # Evaluate the model on the test dataset
     loss, mae = regressor.evaluate(test_data)
-    print(f"Evaluation Loss (MSE): {loss:.4f}, MAE: {mae:.4f}")
+    print(f"Test Set Loss (MSE): {loss:.4f}, MAE: {mae:.4f}")
