@@ -29,7 +29,7 @@ if 'timestamp' in test_data.columns:
 regressor = HybridPriceRegressor(lookback_period=50, input_features=4)
 
 # Load the saved model
-model_path = "final_hybrid_price_regressor2.pth"
+model_path = "final_hybrid_price_regressor_cnn_lstm_128.pth"
 regressor.load_state_dict(torch.load(model_path))  # Load the model's weights
 regressor.eval()  # Set model to evaluation mode
 

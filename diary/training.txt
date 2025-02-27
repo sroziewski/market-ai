@@ -1,0 +1,5 @@
+Epoch 50 - Train Loss: 0.0008, Val Loss: 0.0127
+Model saved with Val Loss: 0.0127
+Restoring best model state.
+Final model saved to final_hybrid_price_regressor2.pth
+Training completed in: 2363.23 seconds
