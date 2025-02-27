@@ -16,6 +16,7 @@ from features import calculate_percentage_change
 
 load_dotenv()
 
+features = ['open', 'high', 'low', 'close', 'volume']
 
 def process_batch(args):
     """
@@ -130,7 +131,7 @@ class HybridPriceRegressor(nn.Module):
         return x
 
     def prepare_data(self, klines_df):
-        data = klines_df[['open', 'high', 'low', 'close']].values
+        data = klines_df[features].values
         data_scaled = self.scaler_X.fit_transform(data)
         X = [data_scaled[i - self.lookback_period:i] for i in range(self.lookback_period, len(data))]
         return np.array(X), self.scaler_X
@@ -295,7 +296,7 @@ if __name__ == "__main__":
     test_data = pd.read_csv(file_path)
 
     # Initialize the regressor
-    regressor = HybridPriceRegressor(lookback_period=50, input_features=4)
+    regressor = HybridPriceRegressor(lookback_period=50, input_features=len(features))
 
     # Measure training time
     start_train_time = time.time()  # Record start time
