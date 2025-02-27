@@ -189,7 +189,7 @@ class HybridPriceRegressor(nn.Module):
 
         # Combine all results into a single list
         y = [label for batch in results for label in batch]
-        # y_scaled = self.scaler_y.fit_transform(np.array(y))  # Scale labels
+        y_scaled = self.scaler_y.fit_transform(np.array(y))  # Scale labels
         #
         # self.cached_labels = y_scaled  # Cache the labels to avoid recomputing
         #
@@ -198,7 +198,7 @@ class HybridPriceRegressor(nn.Module):
         #     np.savez_compressed(save_path, y_scaled)
         #     print(f"Labels saved to {save_path}")
 
-        return np.array(y)
+        return y_scaled
 
     def train_model(self, klines_df, epochs=200, batch_size=512, validation_split=0.2, patience=10, device='cuda',
                     save_path="hybrid_price_regressor2.pth"):

@@ -107,7 +107,7 @@ def calculate_indicators(klines_df):
 
 
 def calculate_percentage_change(prices, window, ref_price, func):
-    return (func(prices[window]) - ref_price) / ref_price
+    return (func(prices[window]) - ref_price) / ref_price * 100
 
 
 def process_batch(args):
