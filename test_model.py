@@ -66,6 +66,8 @@ class PriceDataset(Dataset):
 class HybridPriceRegressor(nn.Module):
     def __init__(self, lookback_period=50, input_features=4, cnn_filters=32, lstm_units=64, dropout_rate=0.3, attention_heads=4):
         super(HybridPriceRegressor, self).__init__()
+        self.scaler_X = MinMaxScaler()
+        self.scaler_y = MinMaxScaler()
         self.lookback_period = lookback_period
         self.input_features = input_features
         self.cnn_filters = cnn_filters
