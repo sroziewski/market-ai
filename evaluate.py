@@ -14,7 +14,7 @@ load_dotenv()
 BASE_DIR = os.getenv("BASE_DIR")
 if BASE_DIR is None:
     raise ValueError("Environment variable 'BASE_DIR' not set")
-file_path = f"{BASE_DIR}/data/crypto/klines/ETHUSDT/ETHUSDT_15m.csv"
+file_path = f"{BASE_DIR}/data/crypto/klines/ETHUSDT/ETHUSDT_1d.csv"
 test_data = pd.read_csv(file_path)
 
 # Ensure OHLC columns contain scalar values
