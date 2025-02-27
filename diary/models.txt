@@ -1,0 +1,74 @@
+def __init__(self, lookback_period=50, input_features=4, cnn_filters=32, lstm_units=64, dropout_rate=0.3):
+    super(HybridPriceRegressor, self).__init__()
+    self.lookback_period = lookback_period
+    self.input_features = input_features
+    self.cnn_filters = cnn_filters
+    self.lstm_units = lstm_units
+    self.dropout_rate = dropout_rate
+    self.scaler_X = MinMaxScaler()
+    self.scaler_y = MinMaxScaler()
+
+    # Cache for labels
+    self.cached_labels = None
+
+    # CNN Feature Extraction
+    self.conv1 = nn.Conv1d(in_channels=input_features, out_channels=cnn_filters, kernel_size=3, padding=1)
+    self.bn1 = nn.BatchNorm1d(cnn_filters)
+    self.pool1 = nn.MaxPool1d(kernel_size=2)
+    self.conv2 = nn.Conv1d(cnn_filters, cnn_filters * 2, kernel_size=3, padding=1)
+    self.bn2 = nn.BatchNorm1d(cnn_filters * 2)
+    self.pool2 = nn.MaxPool1d(kernel_size=2)
+
+    # LSTM Temporal Processing
+    self.lstm1 = nn.LSTM(cnn_filters * 2, lstm_units, batch_first=True)
+    self.lstm2 = nn.LSTM(lstm_units, lstm_units // 2, batch_first=True)
+
+    # Fully Connected Layers for Output
+    self.fc1 = nn.Linear(lstm_units // 2, 64)
+    self.dropout1 = nn.Dropout(dropout_rate)
+    self.fc2 = nn.Linear(64, 32)
+    self.dropout2 = nn.Dropout(dropout_rate)
+    self.fc3 = nn.Linear(32, 6)  # 6 output dimensions
+
+
+
+def __init__(self, lookback_period=50, input_features=4, cnn_filters=32, lstm_units=64, dropout_rate=0.3, attention_heads=4):
+    super(HybridPriceRegressor, self).__init__()
+    self.scaler_X = MinMaxScaler()
+    self.scaler_y = MinMaxScaler()
+    self.lookback_period = lookback_period
+    self.input_features = input_features
+    self.cnn_filters = cnn_filters
+    self.lstm_units = lstm_units
+    self.dropout_rate = dropout_rate
+    self.attention_heads = attention_heads
+
+    # Cache for labels
+    self.cached_labels = None
+
+    # CNN Feature Extraction
+    self.conv1 = nn.Conv1d(in_channels=input_features, out_channels=cnn_filters,
+                           kernel_size=3, padding=1)
+    self.bn1 = nn.BatchNorm1d(cnn_filters)
+    self.pool1 = nn.AdaptiveMaxPool1d(output_size=lookback_period // 2)  # Updated to AdaptiveMaxPool1d
+    self.conv2 = nn.Conv1d(cnn_filters, cnn_filters * 2, kernel_size=3,
+                           padding=1)
+    self.bn2 = nn.BatchNorm1d(cnn_filters * 2)
+    self.pool2 = nn.AdaptiveMaxPool1d(output_size=lookback_period // 4)  # Updated to AdaptiveMaxPool1d
+
+    # LSTM Temporal Processing
+    self.lstm1 = nn.LSTM(cnn_filters * 2, lstm_units, batch_first=True)
+    self.lstm2 = nn.LSTM(lstm_units, lstm_units // 2, batch_first=True)
+
+    # Attention Layer
+    self.attention = nn.MultiheadAttention(embed_dim=lstm_units // 2,
+                                           num_heads=attention_heads,
+                                           dropout=dropout_rate,
+                                           batch_first=True)
+
+    # Fully Connected Layers for Output
+    self.fc1 = nn.Linear(lstm_units // 2, 64)
+    self.dropout1 = nn.Dropout(dropout_rate)
+    self.fc2 = nn.Linear(64, 32)
+    self.dropout2 = nn.Dropout(dropout_rate)
+    self.fc3 = nn.Linear(32, 6)  # 6 output dimensions

@@ -1,25 +1,25 @@
-import gzip
 import os
-import pickle
 import time
+from multiprocessing import Pool, cpu_count
 
 import numpy as np
 import pandas as pd
-from dotenv import load_dotenv
-from sklearn.preprocessing import MinMaxScaler
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from dotenv import load_dotenv
+from sklearn.preprocessing import MinMaxScaler
 from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm  # For progress bar support
-from multiprocessing import Pool, cpu_count
 
+from features import calculate_percentage_change
 
 load_dotenv()
 
+
 def process_batch(args):
     """
-    Process a batch of rows to create labels for the given range.
+    Process a batch of rows to create percentage-based labels for the given range.
 
     Arguments:
         args (tuple): A tuple containing:
@@ -27,25 +27,54 @@ def process_batch(args):
             - low_prices (np.ndarray): Array of low prices
             - high_prices (np.ndarray): Array of high prices
             - close_prices (np.ndarray): Array of close prices
+            - open_prices (np.ndarray, optional): Array of open prices (if None, use close_prices as reference)
             - total_rows (int): Total number of rows in the dataset
 
     Returns:
-        list: A list of calculated labels for the rows in this batch
+        list: A list of percentage-based labels for the rows in this batch:
+              [min_low_20%, max_high_20%, mean_close_20%, min_low_50%, max_high_50%, mean_close_50%]
+              where percentages are relative to the current row's reference price (open or close).
     """
-    row_range, low_prices, high_prices, close_prices, total_rows = args
+    row_range, low_prices, high_prices, close_prices, open_prices, total_rows = args
     local_y = []
+    # Use open_prices as reference if provided, otherwise fall back to close_prices
+    reference_prices = open_prices if open_prices is not None else close_prices
+
     for i in row_range:
+        # Define windows for 20 and 50 rows, ensuring they don't exceed total_rows
         window_20 = slice(i, min(i + 20, total_rows))
         window_50 = slice(i, min(i + 50, total_rows))
+
+        # Current row's reference price (open or close at index i)
+        ref_price = reference_prices[i]
+
+        # Avoid division by zero by checking if ref_price is non-zero
+        if ref_price == 0:
+            # Append zeros or NaNs if reference price is zero to avoid undefined behavior
+            local_y.append([0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+            continue
+
+        # Calculate percentage changes relative to ref_price
+        min_low_20_pct = calculate_percentage_change(low_prices, window_20, ref_price, np.min)
+        max_high_20_pct = calculate_percentage_change(high_prices, window_20, ref_price, np.max)
+        mean_close_20_pct = calculate_percentage_change(close_prices, window_20, ref_price, np.mean)
+
+        min_low_50_pct = calculate_percentage_change(low_prices, window_50, ref_price, np.min)
+        max_high_50_pct = calculate_percentage_change(high_prices, window_50, ref_price, np.max)
+        mean_close_50_pct = calculate_percentage_change(close_prices, window_50, ref_price, np.mean)
+
+        # Append the percentage-based labels
         local_y.append([
-            np.min(low_prices[window_20]),
-            np.max(high_prices[window_20]),
-            np.mean(close_prices[window_20]),
-            np.min(low_prices[window_50]),
-            np.max(high_prices[window_50]),
-            np.mean(close_prices[window_50])
+            min_low_20_pct,
+            max_high_20_pct,
+            mean_close_20_pct,
+            min_low_50_pct,
+            max_high_50_pct,
+            mean_close_50_pct
         ])
+
     return local_y
+
 
 # Custom Dataset for Price Data
 class PriceDataset(Dataset):
@@ -64,7 +93,8 @@ class PriceDataset(Dataset):
 
 # HybridPriceRegressor Model Definition
 class HybridPriceRegressor(nn.Module):
-    def __init__(self, lookback_period=50, input_features=4, cnn_filters=32, lstm_units=64, dropout_rate=0.3, attention_heads=4):
+    def __init__(self, lookback_period=50, input_features=4, cnn_filters=32, lstm_units=64, dropout_rate=0.3,
+                 attention_heads=4):
         super(HybridPriceRegressor, self).__init__()
         self.scaler_X = MinMaxScaler()
         self.scaler_y = MinMaxScaler()
@@ -158,16 +188,16 @@ class HybridPriceRegressor(nn.Module):
 
         # Combine all results into a single list
         y = [label for batch in results for label in batch]
-        y_scaled = self.scaler_y.fit_transform(np.array(y))  # Scale labels
+        # y_scaled = self.scaler_y.fit_transform(np.array(y))  # Scale labels
+        #
+        # self.cached_labels = y_scaled  # Cache the labels to avoid recomputing
+        #
+        # # Optionally save the labels to disk for persistent storage
+        # if save_path:
+        #     np.savez_compressed(save_path, y_scaled)
+        #     print(f"Labels saved to {save_path}")
 
-        self.cached_labels = y_scaled  # Cache the labels to avoid recomputing
-
-        # Optionally save the labels to disk for persistent storage
-        if save_path:
-            np.savez_compressed(save_path, y_scaled)
-            print(f"Labels saved to {save_path}")
-
-        return y_scaled
+        return np.array(y)
 
     def train_model(self, klines_df, epochs=200, batch_size=512, validation_split=0.2, patience=10, device='cuda',
                     save_path="hybrid_price_regressor2.pth"):
@@ -265,7 +295,7 @@ class HybridPriceRegressor(nn.Module):
         self.to(device)
         self.eval()
         X, _ = self.prepare_data(klines_df)
-        y = self.cached_labels if self.cached_labels is not None else self.create_labels(klines_df)
+        y = self.create_labels(klines_df)
         X_tensor = torch.tensor(X, dtype=torch.float32).to(device)
         y_tensor = torch.tensor(y, dtype=torch.float32).to(device)
         with torch.no_grad():
@@ -273,7 +303,6 @@ class HybridPriceRegressor(nn.Module):
             mse = nn.MSELoss()(y_pred, y_tensor).item()
             mae = torch.mean(torch.abs(y_pred - y_tensor)).item()
         return [mse, mae]
-
 
 
 # Main Entry Point
@@ -313,4 +342,3 @@ if __name__ == "__main__":
     # Evaluate the model on the test dataset
     loss, mae = regressor.evaluate(test_data)
     print(f"Evaluation Loss (MSE): {loss:.4f}, MAE: {mae:.4f}")
-
