@@ -19,7 +19,7 @@ load_dotenv()
 
 def process_batch(args):
     """
-    Process a batch of rows to create percentage-based labels for the given range.
+    Process a batch of rows to create labels for the given range.
 
     Arguments:
         args (tuple): A tuple containing:
@@ -27,52 +27,24 @@ def process_batch(args):
             - low_prices (np.ndarray): Array of low prices
             - high_prices (np.ndarray): Array of high prices
             - close_prices (np.ndarray): Array of close prices
-            - open_prices (np.ndarray, optional): Array of open prices (if None, use close_prices as reference)
             - total_rows (int): Total number of rows in the dataset
 
     Returns:
-        list: A list of percentage-based labels for the rows in this batch:
-              [min_low_20%, max_high_20%, mean_close_20%, min_low_50%, max_high_50%, mean_close_50%]
-              where percentages are relative to the current row's reference price (open or close).
+        list: A list of calculated labels for the rows in this batch
     """
-    row_range, low_prices, high_prices, open_prices, close_prices, total_rows = args
+    row_range, low_prices, high_prices, close_prices, total_rows = args
     local_y = []
-    # Use open_prices as reference if provided, otherwise fall back to close_prices
-    reference_prices = open_prices if open_prices is not None else close_prices
-
     for i in row_range:
-        # Define windows for 20 and 50 rows, ensuring they don't exceed total_rows
         window_20 = slice(i, min(i + 20, total_rows))
         window_50 = slice(i, min(i + 50, total_rows))
-
-        # Current row's reference price (open or close at index i)
-        ref_price = reference_prices[i]
-
-        # Avoid division by zero by checking if ref_price is non-zero
-        if ref_price == 0:
-            # Append zeros or NaNs if reference price is zero to avoid undefined behavior
-            local_y.append([0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
-            continue
-
-        # Calculate percentage changes relative to ref_price
-        min_low_20_pct = calculate_percentage_change(low_prices, window_20, ref_price, np.min)
-        max_high_20_pct = calculate_percentage_change(high_prices, window_20, ref_price, np.max)
-        mean_close_20_pct = calculate_percentage_change(close_prices, window_20, ref_price, np.mean)
-
-        min_low_50_pct = calculate_percentage_change(low_prices, window_50, ref_price, np.min)
-        max_high_50_pct = calculate_percentage_change(high_prices, window_50, ref_price, np.max)
-        mean_close_50_pct = calculate_percentage_change(close_prices, window_50, ref_price, np.mean)
-
-        # Append the percentage-based labels
         local_y.append([
-            min_low_20_pct,
-            max_high_20_pct,
-            mean_close_20_pct,
-            min_low_50_pct,
-            max_high_50_pct,
-            mean_close_50_pct
+            np.min(low_prices[window_20]),
+            np.max(high_prices[window_20]),
+            np.mean(close_prices[window_20]),
+            np.min(low_prices[window_50]),
+            np.max(high_prices[window_50]),
+            np.mean(close_prices[window_50])
         ])
-
     return local_y
 
 
@@ -200,7 +172,7 @@ class HybridPriceRegressor(nn.Module):
 
         return y_scaled
 
-    def train_model(self, klines_df, epochs=200, batch_size=512, validation_split=0.2, patience=10, device='cuda',
+    def train_model(self, klines_df, epochs=200, batch_size=64, validation_split=0.2, patience=10, device='cuda',
                     save_path="hybrid_price_regressor2.pth"):
         self.to(device)
 
@@ -216,7 +188,7 @@ class HybridPriceRegressor(nn.Module):
         train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
         val_loader = DataLoader(val_dataset, batch_size=batch_size)
 
-        optimizer = optim.Adam(self.parameters(), lr=0.001)
+        optimizer = optim.Adam(self.parameters(), lr=0.001, weight_decay=1e-5)
         criterion = nn.MSELoss()
         scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.5, patience=5, min_lr=1e-6)
 
@@ -327,7 +299,7 @@ if __name__ == "__main__":
 
     # Measure training time
     start_train_time = time.time()  # Record start time
-    regressor.train_model(sample_data, epochs=50, batch_size=32, validation_split=0.2, patience=10, device=device)
+    regressor.train_model(sample_data, epochs=50, batch_size=64, validation_split=0.2, patience=10, device=device)
     end_train_time = time.time()  # Record end time
     print(f"Training completed in: {end_train_time - start_train_time:.2f} seconds")
 
