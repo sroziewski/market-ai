@@ -23,15 +23,7 @@ load_dotenv()
 #             'sma20_sma50_angle', 'sma20_sma100_angle', 'sma20_sma200_angle', 'sma50_sma100_angle',
 #             'sma50_sma200_angle', 'sma100_sma200_angle', 'omed', 'oshort', 'omed_ob', 'omed_os', 'oshort_ob',
 #             'oshort_os', 'signal_label', 'vfi', 'vfima', 'd']
-features = ['open', 'high', 'low', 'volume', 'close', 'macd', 'macd_signal', 'macd_histogram', 'rsi', 'stoch_rsi_k',
-            'stoch_rsi_d', 'open_sma200_diff_pct', 'high_sma200_diff_pct', 'low_sma200_diff_pct',
-            'close_sma200_diff_pct',
-            'open_sma100_diff_pct', 'high_sma100_diff_pct', 'low_sma100_diff_pct', 'close_sma100_diff_pct',
-            'open_sma50_diff_pct', 'high_sma50_diff_pct', 'low_sma50_diff_pct', 'close_sma50_diff_pct',
-            'open_sma20_diff_pct', 'high_sma20_diff_pct', 'low_sma20_diff_pct', 'close_sma20_diff_pct',
-            'sma20_sma50_angle', 'sma20_sma100_angle', 'sma20_sma200_angle', 'sma50_sma100_angle',
-            'sma50_sma200_angle', 'sma100_sma200_angle', 'omed', 'oshort', 'omed_ob', 'omed_os', 'oshort_ob',
-            'oshort_os', 'vfi', 'vfima', 'd']
+features = ['open', 'high', 'low', 'close']
 
 
 def calculate_indicators(klines_df):
