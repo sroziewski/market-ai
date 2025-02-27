@@ -325,7 +325,7 @@ if __name__ == "__main__":
 
     # Measure training time
     start_train_time = time.time()  # Record start time
-    regressor.train_model(sample_data, epochs=50, batch_size=64, validation_split=0.2, patience=10, device=device,
+    regressor.train_model(sample_data, epochs=100, batch_size=64, validation_split=0.2, patience=20, device=device,
                           save_path="hybrid_price_regressor3.pth")
     end_train_time = time.time()  # Record end time
     print(f"Training completed in: {end_train_time - start_train_time:.2f} seconds")
