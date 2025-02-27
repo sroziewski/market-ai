@@ -259,20 +259,38 @@ class HybridPriceRegressor(nn.Module):
 
 
 # Main Entry Point
+# Main Entry Point
 if __name__ == "__main__":
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     print(f"Using device: {device}")
 
+    # Read data
     sample_data = pd.read_csv("/raid/sroziewski/data/crypto/klines/BTCUSDT/BTCUSDT_15m.csv")
 
-    regressor = HybridPriceRegressor(lookback_period=50, input_features=4)
-    regressor.train_model(sample_data, epochs=50, batch_size=32, validation_split=0.2, patience=10)
+    # Reserve the last 20% for testing
+    total_size = len(sample_data)
+    train_size = int(total_size * 0.8)
 
-    predictions = regressor.predict(sample_data)
-    print("Sample predictions (first 5):")
+    train_data = sample_data[:train_size]  # First 80%
+    test_data = sample_data[train_size:]  # Last 20%
+
+    print(f"Training data size: {len(train_data)}, Testing data size: {len(test_data)}")
+
+    # Initialize the model
+    regressor = HybridPriceRegressor(lookback_period=50, input_features=4)
+
+    # Train the model on training data only
+    regressor.train_model(train_data, epochs=50, batch_size=32, validation_split=0.2, patience=10)
+
+    # Test the model on the unseen test set
+    print("\nEvaluating on test set...")
+    loss, mae = regressor.evaluate(test_data)
+    print(f"Test Set Evaluation - Loss (MSE): {loss:.4f}, MAE: {mae:.4f}")
+
+    # Optional: Generate test predictions
+    predictions = regressor.predict(test_data)
+    print("Sample predictions on test data (first 5):")
     for i, pred in enumerate(predictions[:5]):
         print(f"Prediction {i + 1}: {pred}")
 
-    loss, mae = regressor.evaluate(sample_data)
-    print(f"Evaluation Loss (MSE): {loss:.4f}, MAE: {mae:.4f}")
 
