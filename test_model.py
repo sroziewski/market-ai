@@ -4,7 +4,6 @@ import pickle
 
 import numpy as np
 import pandas as pd
-from dotenv import load_dotenv
 from sklearn.preprocessing import MinMaxScaler
 import torch
 import torch.nn as nn
@@ -13,8 +12,6 @@ from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm  # For progress bar support
 from multiprocessing import Pool, cpu_count
 
-
-load_dotenv()
 
 def process_batch(args):
     """
@@ -186,6 +183,7 @@ class HybridPriceRegressor(nn.Module):
             with tqdm(train_loader, desc=f"Epoch {epoch + 1}/{epochs}", unit="batch") as pbar:
                 for X_batch, y_batch in pbar:
                     X_batch, y_batch = X_batch.to(device), y_batch.to(device)  # Ensure data on GPU
+                    print(f"X_batch: {X_batch.device}, y_batch: {y_batch.device}")  # Debugging step
 
                     optimizer.zero_grad()
                     y_pred = self(X_batch)
@@ -266,28 +264,16 @@ if __name__ == "__main__":
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     print(f"Using device: {device}")
 
-    BASE_DIR = os.getenv("BASE_DIR")
-    if BASE_DIR is None:
-        raise ValueError("Environment variable 'BASE_DIR' not set")
-    file_path = f"{BASE_DIR}/data/crypto/klines/BTCUSDT/BTCUSDT_15m.csv"
-    sample_data = pd.read_csv(file_path)
+    sample_data = pd.read_csv("/raid/sroziewski/data/crypto/klines/BTCUSDT/BTCUSDT_15m.csv")
 
     regressor = HybridPriceRegressor(lookback_period=50, input_features=4)
+    regressor.train_model(sample_data, epochs=50, batch_size=32, validation_split=0.2, patience=10)
 
-    train_size = int(0.8 * len(sample_data))
-    x_train = sample_data[:train_size]
-    x_test = sample_data[train_size:]
-
-    X = regressor.prepare_data(x_test)
-
-    regressor.train_model(x_train, epochs=50, batch_size=32,
-                          validation_split=0.2, patience=10)
-
-    predictions = regressor.predict(x_test)
+    predictions = regressor.predict(sample_data)
     print("Sample predictions (first 5):")
     for i, pred in enumerate(predictions[:5]):
         print(f"Prediction {i + 1}: {pred}")
 
-    loss, mae = regressor.evaluate(x_test)
+    loss, mae = regressor.evaluate(sample_data)
     print(f"Evaluation Loss (MSE): {loss:.4f}, MAE: {mae:.4f}")
 
