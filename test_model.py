@@ -305,16 +305,6 @@ if __name__ == "__main__":
     end_train_time = time.time()  # Record end time
     print(f"Training completed in: {end_train_time - start_train_time:.2f} seconds")
 
-    # Uncomment if predictions on the training set are needed
-    # Measure prediction time
-    start_prediction_time = time.time()  # Record start time
-    predictions = regressor.predict(sample_data)
-    end_prediction_time = time.time()  # Record end time
-    print("Sample predictions (first 5):")
-    for i, pred in enumerate(predictions[:5]):
-        print(f"Prediction {i + 1}: {pred}")
-    print(f"Prediction completed in: {end_prediction_time - start_prediction_time:.2f} seconds")
-
     # Evaluate the model on the test dataset
     loss, mae = regressor.evaluate(test_data)
     print(f"Test Set Loss (MSE): {loss:.4f}, MAE: {mae:.4f}")
