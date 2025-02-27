@@ -46,11 +46,11 @@ class HybridPriceRegressor(nn.Module):
         self.conv1 = nn.Conv1d(in_channels=input_features, out_channels=cnn_filters,
                                kernel_size=3, padding=1)
         self.bn1 = nn.BatchNorm1d(cnn_filters)
-        self.pool1 = nn.MaxPool1d(kernel_size=2)
+        self.pool1 = nn.AdaptiveMaxPool1d(output_size=lookback_period // 2)  # Updated to AdaptiveMaxPool1d
         self.conv2 = nn.Conv1d(cnn_filters, cnn_filters * 2, kernel_size=3,
                                padding=1)
         self.bn2 = nn.BatchNorm1d(cnn_filters * 2)
-        self.pool2 = nn.MaxPool1d(kernel_size=2)
+        self.pool2 = nn.AdaptiveMaxPool1d(output_size=lookback_period // 4)  # Updated to AdaptiveMaxPool1d
 
         # LSTM Temporal Processing
         self.lstm1 = nn.LSTM(cnn_filters * 2, lstm_units, batch_first=True)
@@ -195,22 +195,28 @@ if __name__ == "__main__":
     print(f"Using device: {device}")
 
     BASE_DIR = os.getenv("BASE_DIR")
+    if BASE_DIR is None:
+        raise ValueError("Environment variable 'BASE_DIR' not set")
     file_path = f"{BASE_DIR}/data/crypto/klines/BTCUSDT/BTCUSDT_15m.csv"
     sample_data = pd.read_csv(file_path)
     df_features = calculate_indicators(sample_data)
 
+    regressor = HybridPriceRegressor(lookback_period=50, input_features=len(features))
+    X = regressor.prepare_data(df_features)
+    labels = np.array(create_labels(sample_data)[regressor.lookback_period:])  # Align labels with X
+
     scaler_X = MinMaxScaler()
-    df_features = scaler_X.fit_transform(df_features)
-    labels = create_labels(sample_data)
 
     train_size = int(0.8 * len(df_features))
     train_df = df_features[:train_size]
     test_df = df_features[train_size:]
 
+    train_df = scaler_X.fit_transform(train_df[features])
+    test_df = scaler_X.transform(test_df[features])
+
     train_labels = labels[:train_size]
     test_labels = labels[train_size:]
 
-    regressor = HybridPriceRegressor(lookback_period=50, input_features=len(features))
     regressor.train_model(train_df, train_labels, batch_size=64, validation_split=0.2, patience=10)
 
     predictions = regressor.predict(test_df)
