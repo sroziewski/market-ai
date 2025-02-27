@@ -35,7 +35,7 @@ def process_batch(args):
               [min_low_20%, max_high_20%, mean_close_20%, min_low_50%, max_high_50%, mean_close_50%]
               where percentages are relative to the current row's reference price (open or close).
     """
-    row_range, low_prices, high_prices, open_prices, close_prices, open_prices, total_rows = args
+    row_range, low_prices, high_prices, open_prices, close_prices, total_rows = args
     local_y = []
     # Use open_prices as reference if provided, otherwise fall back to close_prices
     reference_prices = open_prices if open_prices is not None else close_prices
@@ -308,9 +308,10 @@ class HybridPriceRegressor(nn.Module):
 
 # Main Entry Point
 if __name__ == "__main__":
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    device = os.getenv("DEVICE")
+    if device is None:
+        device = 'cpu'
     print(f"Using device: {device}")
-
     BASE_DIR = os.getenv("BASE_DIR")
     if BASE_DIR is None:
         raise ValueError("Environment variable 'BASE_DIR' not set")
@@ -326,7 +327,7 @@ if __name__ == "__main__":
 
     # Measure training time
     start_train_time = time.time()  # Record start time
-    regressor.train_model(sample_data, epochs=50, batch_size=32, validation_split=0.2, patience=10)
+    regressor.train_model(sample_data, epochs=50, batch_size=32, validation_split=0.2, patience=10, device=device)
     end_train_time = time.time()  # Record end time
     print(f"Training completed in: {end_train_time - start_train_time:.2f} seconds")
 
