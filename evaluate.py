@@ -1,11 +1,20 @@
+import os
+
 import torch
 import pandas as pd
 import time
 
+from dotenv import load_dotenv
+
 from test_model import HybridPriceRegressor
 
+load_dotenv()
+
 # Load your test data
-file_path = "path_to_your_test_data_file.csv"
+BASE_DIR = os.getenv("BASE_DIR")
+if BASE_DIR is None:
+    raise ValueError("Environment variable 'BASE_DIR' not set")
+file_path = f"{BASE_DIR}/data/crypto/klines/ETHUSDT/ETHUSDT_15m.csv"
 test_data = pd.read_csv(file_path)
 
 # Instantiate your model class (ensure features match your structure)
