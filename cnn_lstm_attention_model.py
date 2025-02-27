@@ -76,16 +76,13 @@ class HybridPriceRegressor(nn.Module):
         x = self.pool1(x)
         x = torch.relu(self.bn2(self.conv2(x)))
         x = self.pool2(x)
-
         # LSTM Processing
         x = x.transpose(1, 2)  # (batch, seq_len, features)
         x, _ = self.lstm1(x)
         x, _ = self.lstm2(x)  # Shape: (batch, seq_len, lstm_units // 2)
-
         # Attention Mechanism
         attn_output, _ = self.attention(x, x, x)  # Self-attention
         x = attn_output.mean(dim=1)  # Mean across sequence length: (batch, lstm_units // 2)
-
         # Fully Connected Layers
         x = torch.relu(self.fc1(x))
         x = self.dropout1(x)

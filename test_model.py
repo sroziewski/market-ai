@@ -64,30 +64,36 @@ class PriceDataset(Dataset):
 
 # HybridPriceRegressor Model Definition
 class HybridPriceRegressor(nn.Module):
-    def __init__(self, lookback_period=50, input_features=4, cnn_filters=32, lstm_units=64, dropout_rate=0.3):
-        super(HybridPriceRegressor, self).__init__()
+    def __init__(self, lookback_period=50, input_features=4, cnn_filters=32, lstm_units=64, dropout_rate=0.3, attention_heads=4):
         self.lookback_period = lookback_period
         self.input_features = input_features
         self.cnn_filters = cnn_filters
         self.lstm_units = lstm_units
         self.dropout_rate = dropout_rate
-        self.scaler_X = MinMaxScaler()
-        self.scaler_y = MinMaxScaler()
+        self.attention_heads = attention_heads
 
         # Cache for labels
         self.cached_labels = None
 
         # CNN Feature Extraction
-        self.conv1 = nn.Conv1d(in_channels=input_features, out_channels=cnn_filters, kernel_size=3, padding=1)
+        self.conv1 = nn.Conv1d(in_channels=input_features, out_channels=cnn_filters,
+                               kernel_size=3, padding=1)
         self.bn1 = nn.BatchNorm1d(cnn_filters)
-        self.pool1 = nn.MaxPool1d(kernel_size=2)
-        self.conv2 = nn.Conv1d(cnn_filters, cnn_filters * 2, kernel_size=3, padding=1)
+        self.pool1 = nn.AdaptiveMaxPool1d(output_size=lookback_period // 2)  # Updated to AdaptiveMaxPool1d
+        self.conv2 = nn.Conv1d(cnn_filters, cnn_filters * 2, kernel_size=3,
+                               padding=1)
         self.bn2 = nn.BatchNorm1d(cnn_filters * 2)
-        self.pool2 = nn.MaxPool1d(kernel_size=2)
+        self.pool2 = nn.AdaptiveMaxPool1d(output_size=lookback_period // 4)  # Updated to AdaptiveMaxPool1d
 
         # LSTM Temporal Processing
         self.lstm1 = nn.LSTM(cnn_filters * 2, lstm_units, batch_first=True)
         self.lstm2 = nn.LSTM(lstm_units, lstm_units // 2, batch_first=True)
+
+        # Attention Layer
+        self.attention = nn.MultiheadAttention(embed_dim=lstm_units // 2,
+                                               num_heads=attention_heads,
+                                               dropout=dropout_rate,
+                                               batch_first=True)
 
         # Fully Connected Layers for Output
         self.fc1 = nn.Linear(lstm_units // 2, 64)
@@ -97,20 +103,25 @@ class HybridPriceRegressor(nn.Module):
         self.fc3 = nn.Linear(32, 6)  # 6 output dimensions
 
     def forward(self, x):
-        x = x.transpose(1, 2)  # Reshape for Conv1d: (batch, features, seq_len)
+        # CNN Feature Extraction
+        x = x.transpose(1, 2)  # (batch, features, seq_len)
         x = torch.relu(self.bn1(self.conv1(x)))
         x = self.pool1(x)
         x = torch.relu(self.bn2(self.conv2(x)))
         x = self.pool2(x)
-        x = x.transpose(1, 2)  # Reshape for LSTM: (batch, seq_len, features)
+        # LSTM Processing
+        x = x.transpose(1, 2)  # (batch, seq_len, features)
         x, _ = self.lstm1(x)
-        x, _ = self.lstm2(x)
-        x = x[:, -1, :]  # Take only the final output of the last LSTM layer
+        x, _ = self.lstm2(x)  # Shape: (batch, seq_len, lstm_units // 2)
+        # Attention Mechanism
+        attn_output, _ = self.attention(x, x, x)  # Self-attention
+        x = attn_output.mean(dim=1)  # Mean across sequence length: (batch, lstm_units // 2)
+        # Fully Connected Layers
         x = torch.relu(self.fc1(x))
         x = self.dropout1(x)
         x = torch.relu(self.fc2(x))
         x = self.dropout2(x)
-        x = self.fc3(x)  # Final output
+        x = self.fc3(x)  # (batch, 6)
         return x
 
     def prepare_data(self, klines_df):
@@ -156,7 +167,7 @@ class HybridPriceRegressor(nn.Module):
         return y_scaled
 
     def train_model(self, klines_df, epochs=200, batch_size=512, validation_split=0.2, patience=10, device='cuda',
-                    save_path="hybrid_price_regressor.pth"):
+                    save_path="hybrid_price_regressor2.pth"):
         self.to(device)
 
         # Prepare data
@@ -183,7 +194,7 @@ class HybridPriceRegressor(nn.Module):
         for epoch in range(epochs):
             self.train()  # Set to training mode
             train_loss = 0
-            print(f"Epoch {epoch + 1} - Using device: {next(self.parameters()).device}")  # Report device
+            print(f"Epoch {epoch + 1}")  # Report device
             with tqdm(train_loader, desc=f"Epoch {epoch + 1}/{epochs}", unit="batch") as pbar:
                 for X_batch, y_batch in pbar:
                     X_batch, y_batch = X_batch.to(device), y_batch.to(device)  # Ensure data on GPU
