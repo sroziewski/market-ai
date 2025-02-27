@@ -112,15 +112,14 @@ class HybridPriceRegressor(nn.Module):
         train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False)
         val_loader = DataLoader(val_dataset, batch_size=batch_size)
 
-        # Lower learning rate and add weight decay for regularization
         optimizer = optim.Adam(self.parameters(), lr=0.0005, weight_decay=1e-5)
         criterion = nn.MSELoss()
-        # Reduce LR more aggressively
         scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.5, patience=3, min_lr=1e-6)
 
         best_val_loss = float('inf')
         patience_counter = 0
         best_model_state = None
+        min_epoch_for_saving = 10  # Prevent saving best model before this epoch
 
         for epoch in range(epochs):
             self.train()
@@ -132,7 +131,6 @@ class HybridPriceRegressor(nn.Module):
                     y_pred = self(X_batch)
                     loss = criterion(y_pred, y_batch)
                     loss.backward()
-                    # Gradient clipping to prevent exploding gradients
                     torch.nn.utils.clip_grad_norm_(self.parameters(), max_norm=1.0)
                     optimizer.step()
                     train_loss += loss.item()
@@ -150,18 +148,21 @@ class HybridPriceRegressor(nn.Module):
 
             val_loss /= len(val_loader)
             print(f"Epoch {epoch + 1} - Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}, "
-                  f"LR: {optimizer.param_groups[0]['lr']:.6f}")
+                  f"LR: {optimizer.param_groups[0]['lr']:.6f}, Patience: {patience_counter}")
 
             scheduler.step(val_loss)
 
-            if val_loss < best_val_loss:
+            # Only save and reset patience if epoch >= min_epoch_for_saving
+            if epoch >= min_epoch_for_saving and val_loss < best_val_loss:
                 best_val_loss = val_loss
                 best_model_state = self.state_dict()
                 patience_counter = 0
                 torch.save(best_model_state, save_path)
                 print(f"Model saved with Val Loss: {best_val_loss:.4f}")
             else:
-                patience_counter += 1
+                # Increment patience counter only after min_epoch_for_saving
+                if epoch >= min_epoch_for_saving:
+                    patience_counter += 1
                 if patience_counter >= patience:
                     print("Early stopping triggered")
                     break
@@ -169,6 +170,9 @@ class HybridPriceRegressor(nn.Module):
         if best_model_state:
             self.load_state_dict(best_model_state)
             print("Restoring best model state.")
+        else:
+            print("No model saved (didn't reach min_epoch_for_saving or no improvement after). "
+                  "Using final state.")
 
         final_model_path = "final_" + save_path
         torch.save(self.state_dict(), final_model_path)
