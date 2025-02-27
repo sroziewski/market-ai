@@ -1,6 +1,7 @@
 import gzip
 import os
 import pickle
+import time
 
 import numpy as np
 import pandas as pd
@@ -269,21 +270,33 @@ if __name__ == "__main__":
     BASE_DIR = os.getenv("BASE_DIR")
     if BASE_DIR is None:
         raise ValueError("Environment variable 'BASE_DIR' not set")
+
+    # Load data files
     file_path = f"{BASE_DIR}/data/crypto/klines/BTCUSDT/BTCUSDT_15m.csv"
     sample_data = pd.read_csv(file_path)
     file_path = f"{BASE_DIR}/data/crypto/klines/ETHUSDT/ETHUSDT_15m.csv"
     test_data = pd.read_csv(file_path)
 
+    # Initialize the regressor
     regressor = HybridPriceRegressor(lookback_period=50, input_features=4)
+
+    # Measure training time
+    start_train_time = time.time()  # Record start time
     regressor.train_model(sample_data, epochs=50, batch_size=32, validation_split=0.2, patience=10)
+    end_train_time = time.time()  # Record end time
+    print(f"Training completed in: {end_train_time - start_train_time:.2f} seconds")
 
-    # predictions = regressor.predict(sample_data)
-    # print("Sample predictions (first 5):")
-    # for i, pred in enumerate(predictions[:5]):
-    #     print(f"Prediction {i + 1}: {pred}")
+    # Uncomment if predictions on the training set are needed
+    # Measure prediction time
+    start_prediction_time = time.time()  # Record start time
+    predictions = regressor.predict(sample_data)
+    end_prediction_time = time.time()  # Record end time
+    print("Sample predictions (first 5):")
+    for i, pred in enumerate(predictions[:5]):
+        print(f"Prediction {i + 1}: {pred}")
+    print(f"Prediction completed in: {end_prediction_time - start_prediction_time:.2f} seconds")
 
-
-
+    # Evaluate the model on the test dataset
     loss, mae = regressor.evaluate(test_data)
     print(f"Evaluation Loss (MSE): {loss:.4f}, MAE: {mae:.4f}")
 
