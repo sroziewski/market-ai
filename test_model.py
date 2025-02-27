@@ -153,7 +153,7 @@ class HybridPriceRegressor(nn.Module):
         chunks = [indices[i:i + chunk_size] for i in range(0, len(indices), chunk_size)]
 
         # Prepare arguments for `process_batch`
-        args = [(chunk, low_prices, high_prices, open_prices, close_prices, total_rows) for chunk in chunks]
+        args = [(chunk, low_prices, high_prices, close_prices, total_rows) for chunk in chunks]
 
         # Use Pool to process in parallel
         with Pool(num_cores) as pool:
