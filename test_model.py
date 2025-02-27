@@ -271,15 +271,19 @@ if __name__ == "__main__":
         raise ValueError("Environment variable 'BASE_DIR' not set")
     file_path = f"{BASE_DIR}/data/crypto/klines/BTCUSDT/BTCUSDT_15m.csv"
     sample_data = pd.read_csv(file_path)
+    file_path = f"{BASE_DIR}/data/crypto/klines/ETHUSDT/ETHUSDT_15m.csv"
+    test_data = pd.read_csv(file_path)
 
     regressor = HybridPriceRegressor(lookback_period=50, input_features=4)
     regressor.train_model(sample_data, epochs=50, batch_size=32, validation_split=0.2, patience=10)
 
-    predictions = regressor.predict(sample_data)
-    print("Sample predictions (first 5):")
-    for i, pred in enumerate(predictions[:5]):
-        print(f"Prediction {i + 1}: {pred}")
+    # predictions = regressor.predict(sample_data)
+    # print("Sample predictions (first 5):")
+    # for i, pred in enumerate(predictions[:5]):
+    #     print(f"Prediction {i + 1}: {pred}")
 
-    loss, mae = regressor.evaluate(sample_data)
+
+
+    loss, mae = regressor.evaluate(test_data)
     print(f"Evaluation Loss (MSE): {loss:.4f}, MAE: {mae:.4f}")
 
