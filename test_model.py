@@ -247,7 +247,7 @@ class HybridPriceRegressor(nn.Module):
         self.to(device)
         self.eval()
         X, _ = self.prepare_data(klines_df)
-        y = self.create_labels(klines_df)
+        y = self.cached_labels if self.cached_labels is not None else self.create_labels(klines_df)
         X_tensor = torch.tensor(X, dtype=torch.float32).to(device)
         y_tensor = torch.tensor(y, dtype=torch.float32).to(device)
         with torch.no_grad():
@@ -265,21 +265,14 @@ if __name__ == "__main__":
 
     sample_data = pd.read_csv("/raid/sroziewski/data/crypto/klines/BTCUSDT/BTCUSDT_15m.csv")
 
-    # Reserve the last 20% for testing
-    total_size = len(sample_data)
-    train_size = int(total_size * 0.8)
-
-    train_data = sample_data[:train_size]  # First 80%
-    test_data = sample_data[train_size:]  # Last 20%
-
     regressor = HybridPriceRegressor(lookback_period=50, input_features=4)
-    regressor.train_model(train_data, epochs=50, batch_size=64, validation_split=0.2, patience=10)
+    regressor.train_model(sample_data, epochs=50, batch_size=32, validation_split=0.2, patience=10)
 
-    predictions = regressor.predict(test_data)
+    predictions = regressor.predict(sample_data)
     print("Sample predictions (first 5):")
     for i, pred in enumerate(predictions[:5]):
         print(f"Prediction {i + 1}: {pred}")
 
-    loss, mae = regressor.evaluate(test_data)
+    loss, mae = regressor.evaluate(sample_data)
     print(f"Evaluation Loss (MSE): {loss:.4f}, MAE: {mae:.4f}")
 
