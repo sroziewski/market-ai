@@ -100,7 +100,7 @@ class HybridPriceRegressor(nn.Module):
         return np.array(X)
 
     def train_model(self, train_df, train_labels, epochs=200, batch_size=128, validation_split=0.2,
-                    patience=10, device='cuda', save_path="hybrid_price_regressor.pth"):
+                    patience=20, device='cuda', save_path="hybrid_price_regressor.pth"):
         self.to(device)
 
         split_idx = int(len(train_df) * (1 - validation_split))
@@ -109,12 +109,14 @@ class HybridPriceRegressor(nn.Module):
 
         train_dataset = PriceDataset(X_train, y_train)
         val_dataset = PriceDataset(X_val, y_val)
-        train_loader = DataLoader(train_dataset, batch_size=batch_size)
+        train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False)
         val_loader = DataLoader(val_dataset, batch_size=batch_size)
 
-        optimizer = optim.Adam(self.parameters(), lr=0.001)
+        # Lower learning rate and add weight decay for regularization
+        optimizer = optim.Adam(self.parameters(), lr=0.0005, weight_decay=1e-5)
         criterion = nn.MSELoss()
-        scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.5, patience=5, min_lr=1e-6)
+        # Reduce LR more aggressively
+        scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.5, patience=3, min_lr=1e-6)
 
         best_val_loss = float('inf')
         patience_counter = 0
@@ -130,9 +132,11 @@ class HybridPriceRegressor(nn.Module):
                     y_pred = self(X_batch)
                     loss = criterion(y_pred, y_batch)
                     loss.backward()
+                    # Gradient clipping to prevent exploding gradients
+                    torch.nn.utils.clip_grad_norm_(self.parameters(), max_norm=1.0)
                     optimizer.step()
                     train_loss += loss.item()
-                    pbar.set_postfix({"Train Loss": loss.item()})
+                    pbar.set_postfix({"Train Loss": train_loss / (pbar.n + 1)})
 
             train_loss /= len(train_loader)
 
@@ -145,7 +149,8 @@ class HybridPriceRegressor(nn.Module):
                     val_loss += criterion(y_pred, y_batch).item()
 
             val_loss /= len(val_loader)
-            print(f"Epoch {epoch + 1} - Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}")
+            print(f"Epoch {epoch + 1} - Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}, "
+                  f"LR: {optimizer.param_groups[0]['lr']:.6f}")
 
             scheduler.step(val_loss)
 
@@ -169,10 +174,11 @@ class HybridPriceRegressor(nn.Module):
         torch.save(self.state_dict(), final_model_path)
         print(f"Final model saved to {final_model_path}")
 
-    def predict(self, test_df, device='cuda'):
+    def predict(self, klines_df, device='cuda'):
         self.to(device)
         self.eval()
-        X_tensor = torch.tensor(test_df, dtype=torch.float32).to(device)
+        X = self.prepare_data(klines_df)  # Convert DataFrame to 3D array
+        X_tensor = torch.tensor(X, dtype=torch.float32).to(device)
         with torch.no_grad():
             predictions = self(X_tensor).cpu().numpy()
         return predictions.tolist()
