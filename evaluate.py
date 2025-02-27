@@ -18,7 +18,6 @@ file_path = f"{BASE_DIR}/data/crypto/klines/ETHUSDT/ETHUSDT_15m.csv"
 test_data = pd.read_csv(file_path)
 
 # Instantiate your model class (ensure features match your structure)
-# Assuming your model is called HybridPriceRegressor
 regressor = HybridPriceRegressor(lookback_period=50, input_features=4)
 
 # Load the saved model
@@ -28,14 +27,19 @@ regressor.eval()  # Set model to evaluation mode
 
 # Measure prediction time
 start_prediction_time = time.time()  # Record start time
-regressor.create_labels(test_data)  # Generate predictions for test_data
+regressor.create_labels(test_data)  # Generate labels if necessary
 predictions = regressor.predict(test_data)  # Generate predictions for test_data
 end_prediction_time = time.time()  # Record end time
 
-# Output predictions
-print("Sample predictions (first 50):")
-for i, pred in enumerate(predictions[:50]):  # Print first 5 predictions
-    print(f"Prediction {i + 1}: {pred}")
+# Output predictions with corresponding timestamps
+if 'timestamp' not in test_data.columns:
+    raise ValueError("'timestamp' column not found in the test data")
+
+print("All predictions with timestamps:")
+for i, (timestamp, pred) in enumerate(
+        zip(test_data['timestamp'], predictions)):  # Iterate over timestamps and predictions
+    print(f"{i + 1} | Timestamp: {timestamp} | Prediction: {pred}")
+
 print(f"Prediction completed in: {end_prediction_time - start_prediction_time:.2f} seconds")
 
 # Evaluate the model on the test dataset
