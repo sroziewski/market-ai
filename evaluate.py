@@ -17,13 +17,13 @@ if BASE_DIR is None:
 file_path = f"{BASE_DIR}/data/crypto/klines/ETHUSDT/ETHUSDT_15m.csv"
 test_data = pd.read_csv(file_path)
 
-# Convert necessary columns to scalar types if needed
-required_columns = ['timestamp', 'open', 'high', 'low', 'close']
-for col in required_columns:
-    if col not in test_data.columns:
-        raise ValueError(f"'{col}' column not found in the test data")
-    # Ensure no lists/arrays; consider selecting the first value if a column has lists
-    test_data[col] = test_data[col].apply(lambda x: x if not isinstance(x, (list, tuple)) else x[0])
+# Ensure OHLC columns contain scalar values
+for col in ['open', 'high', 'low', 'close']:
+    test_data[col] = test_data[col].apply(lambda x: x[0] if isinstance(x, list) else x).astype(float)
+
+# Ensure 'timestamp' is a scalar value (optional: convert to datetime)
+if 'timestamp' in test_data.columns:
+    test_data['timestamp'] = test_data['timestamp'].apply(lambda x: x[0] if isinstance(x, list) else x)
 
 # Instantiate your model class
 regressor = HybridPriceRegressor(lookback_period=50, input_features=4)
@@ -39,13 +39,14 @@ regressor.create_labels(test_data)  # Generate labels if necessary
 predictions = regressor.predict(test_data)  # Generate predictions for test_data
 end_prediction_time = time.time()  # Record end time
 
+# Ensure predictions are scalar values
+predictions = [float(pred[0]) if isinstance(pred, list) else float(pred) for pred in predictions]
+
 # Output predictions with corresponding timestamps and OHLC values
 print("All predictions with timestamps and OHLC values:")
 for i, (timestamp, open_, high, low, close, pred) in enumerate(zip(
         test_data['timestamp'], test_data['open'], test_data['high'], test_data['low'], test_data['close'], predictions
 )):
-    # Ensure all numerical values are printed correctly
-    open_, high, low, close, pred = float(open_), float(high), float(low), float(close), float(pred)
     print(
         f"{i + 1} | Timestamp: {timestamp} | Open: {open_:.4f} | High: {high:.4f} | Low: {low:.4f} | Close: {close:.4f} | Prediction: {pred:.4f}")
 
