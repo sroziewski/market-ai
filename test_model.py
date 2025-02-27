@@ -4,6 +4,7 @@ import pickle
 
 import numpy as np
 import pandas as pd
+from dotenv import load_dotenv
 from sklearn.preprocessing import MinMaxScaler
 import torch
 import torch.nn as nn
@@ -12,6 +13,8 @@ from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm  # For progress bar support
 from multiprocessing import Pool, cpu_count
 
+
+load_dotenv()
 
 def process_batch(args):
     """
@@ -263,10 +266,20 @@ if __name__ == "__main__":
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     print(f"Using device: {device}")
 
-    sample_data = pd.read_csv("/raid/sroziewski/data/crypto/klines/BTCUSDT/BTCUSDT_15m.csv")
+    BASE_DIR = os.getenv("BASE_DIR")
+    if BASE_DIR is None:
+        raise ValueError("Environment variable 'BASE_DIR' not set")
+    file_path = f"{BASE_DIR}/data/crypto/klines/BTCUSDT/BTCUSDT_15m.csv"
+    sample_data = pd.read_csv(file_path)
+
+    total_size = len(sample_data)
+    train_size = int(total_size * 0.8)
+
+    train_data = sample_data[:train_size]  # First 80%
+    test_data = sample_data[train_size:]  # Last 20%
 
     regressor = HybridPriceRegressor(lookback_period=50, input_features=4)
-    regressor.train_model(sample_data, epochs=50, batch_size=32, validation_split=0.2, patience=10)
+    regressor.train_model(train_data, epochs=50, batch_size=32, validation_split=0.2, patience=10)
 
     predictions = regressor.predict(sample_data)
     print("Sample predictions (first 5):")
