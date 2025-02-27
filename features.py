@@ -115,7 +115,7 @@ def calculate_indicators(klines_df):
 
 
 def calculate_percentage_change(prices, window, ref_price, func):
-    return (func(prices[window]) - ref_price) / ref_price * 100
+    return (func(prices[window]) - ref_price) / ref_price
 
 
 def process_batch(args):
@@ -197,14 +197,12 @@ def create_labels(df, save_path=None):
         results = list(tqdm(pool.imap(process_batch, args), total=len(chunks), desc="Creating Labels"))
 
     y = [label for batch in results for label in batch]
-    scaler_y = MinMaxScaler()
-    y_scaled = scaler_y.fit_transform(np.array(y).reshape(-1, 1))  # Ensure proper shape before scaling
 
     if save_path:
-        np.savez_compressed(save_path, y_scaled)
+        np.savez_compressed(save_path, y)
         print(f"Labels saved to {save_path}")
 
-    return y_scaled
+    return y
 
 
 
@@ -212,6 +210,7 @@ if __name__ == "__main__":
     BASE_DIR = os.getenv("BASE_DIR")
     file_path = f"{BASE_DIR}/data/crypto/klines/BTCUSDT/BTCUSDT_1d.csv"
     sample_data = pd.read_csv(file_path)
+    labels = create_labels(sample_data)
     df_features = calculate_indicators(sample_data)
     train_size = int(0.8 * len(df_features))
     train_df = df_features[:train_size]
