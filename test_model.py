@@ -277,8 +277,8 @@ if __name__ == "__main__":
     X = regressor.prepare_data(sample_data)
 
     train_size = int(0.8 * len(X))
-    train_df = X[:train_size]
-    test_df = X[train_size:]
+    train_df = pd.DataFrame(X[:train_size], columns=['open', 'high', 'low', 'close'])
+    test_df = pd.DataFrame(X[train_size:], columns=['open', 'high', 'low', 'close'])
 
     regressor.train_model(train_df, epochs=50, batch_size=32,
                           validation_split=0.2, patience=10)
