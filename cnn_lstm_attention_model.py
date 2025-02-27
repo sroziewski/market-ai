@@ -229,7 +229,7 @@ if __name__ == "__main__":
     train_labels = labels[:train_size]
     test_labels = labels[train_size:]
 
-    regressor.train_model(train_df, train_labels, batch_size=64, validation_split=0.2, patience=10)
+    regressor.train_model(train_df, train_labels, batch_size=32, validation_split=0.2, patience=10)
 
     predictions = regressor.predict(df_features_scaled[train_size + regressor.lookback_period:])
     print("Sample predictions (first 5):")
