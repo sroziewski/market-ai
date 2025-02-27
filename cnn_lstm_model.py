@@ -9,9 +9,7 @@ from sklearn.preprocessing import MinMaxScaler
 from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm  # For progress bar support
 
-from features import features, calculate_indicators
-
-lookback = 130  # as for the volume_flow_indicator computation
+from features import features, calculate_indicators, create_labels
 
 
 # Custom Dataset for Price Data
@@ -31,7 +29,7 @@ class PriceDataset(Dataset):
 
 # HybridPriceRegressor Model Definition
 class HybridPriceRegressor(nn.Module):
-    def __init__(self, lookback_period=lookback, input_features=4, cnn_filters=32,
+    def __init__(self, lookback_period=50, input_features=4, cnn_filters=32,
                  lstm_units=64, dropout_rate=0.3, attention_heads=4):
         super(HybridPriceRegressor, self).__init__()
         self.lookback_period = lookback_period
@@ -101,25 +99,22 @@ class HybridPriceRegressor(nn.Module):
         X = [data[i - self.lookback_period:i] for i in range(self.lookback_period, len(data))]
         return np.array(X)
 
-    def train_model(self, klines_df, epochs=200, batch_size=128, validation_split=0.2,
+    def train_model(self, train_df, train_labels, epochs=200, batch_size=128, validation_split=0.2,
                     patience=10, device='cuda', save_path="hybrid_price_regressor.pth"):
         self.to(device)
 
-        X, _ = self.prepare_data(klines_df)
-        y = self.create_labels(klines_df)
-        split_idx = int(len(X) * (1 - validation_split))
-        X_train, X_val = X[:split_idx], X[split_idx:]
-        y_train, y_val = y[:split_idx], y[split_idx:]
+        split_idx = int(len(train_df) * (1 - validation_split))
+        X_train, X_val = train_df[:split_idx], train_df[split_idx:]
+        y_train, y_val = train_labels[:split_idx], train_labels[split_idx:]
 
         train_dataset = PriceDataset(X_train, y_train)
         val_dataset = PriceDataset(X_val, y_val)
-        train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False)
+        train_loader = DataLoader(train_dataset, batch_size=batch_size)
         val_loader = DataLoader(val_dataset, batch_size=batch_size)
 
         optimizer = optim.Adam(self.parameters(), lr=0.001)
         criterion = nn.MSELoss()
-        scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.5,
-                                                         patience=5, min_lr=1e-6)
+        scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.5, patience=5, min_lr=1e-6)
 
         best_val_loss = float('inf')
         patience_counter = 0
@@ -174,23 +169,19 @@ class HybridPriceRegressor(nn.Module):
         torch.save(self.state_dict(), final_model_path)
         print(f"Final model saved to {final_model_path}")
 
-    def predict(self, klines_df, device='cuda'):
+    def predict(self, test_df, device='cuda'):
         self.to(device)
         self.eval()
-        X, _ = self.prepare_data(klines_df)
-        X_tensor = torch.tensor(X, dtype=torch.float32).to(device)
+        X_tensor = torch.tensor(test_df, dtype=torch.float32).to(device)
         with torch.no_grad():
-            predictions_scaled = self(X_tensor).cpu().numpy()
-        predictions = self.scaler_y.inverse_transform(predictions_scaled)
+            predictions = self(X_tensor).cpu().numpy()
         return predictions.tolist()
 
-    def evaluate(self, klines_df, device='cuda'):
+    def evaluate(self, test_df, test_labels, device='cuda'):
         self.to(device)
         self.eval()
-        X, _ = self.prepare_data(klines_df)
-        y = self.cached_labels if self.cached_labels is not None else self.create_labels(klines_df)
-        X_tensor = torch.tensor(X, dtype=torch.float32).to(device)
-        y_tensor = torch.tensor(y, dtype=torch.float32).to(device)
+        X_tensor = torch.tensor(test_df, dtype=torch.float32).to(device)
+        y_tensor = torch.tensor(test_labels, dtype=torch.float32).to(device)
         with torch.no_grad():
             y_pred = self(X_tensor)
             mse = nn.MSELoss()(y_pred, y_tensor).item()
@@ -209,20 +200,23 @@ if __name__ == "__main__":
     df_features = calculate_indicators(sample_data)
 
     scaler_X = MinMaxScaler()
-    scaler_Y = MinMaxScaler()
     df_features = scaler_X.fit_transform(df_features)
+    labels = create_labels(sample_data)
 
     train_size = int(0.8 * len(df_features))
     train_df = df_features[:train_size]
     test_df = df_features[train_size:]
 
+    train_labels = labels[:train_size]
+    test_labels = labels[train_size:]
+
     regressor = HybridPriceRegressor(lookback_period=50, input_features=len(features))
-    regressor.train_model(train_df, batch_size=64, validation_split=0.2, patience=10)
+    regressor.train_model(train_df, train_labels, batch_size=64, validation_split=0.2, patience=10)
 
     predictions = regressor.predict(test_df)
     print("Sample predictions (first 500):")
     for i, pred in enumerate(predictions[:500]):
         print(f"Prediction {i + 1}: {pred}")
 
-    loss, mae = regressor.evaluate(test_df)
+    loss, mae = regressor.evaluate(test_df, test_labels)
     print(f"Evaluation Loss (MSE): {loss:.4f}, MAE: {mae:.4f}")
