@@ -201,28 +201,29 @@ if __name__ == "__main__":
     sample_data = pd.read_csv(file_path)
     df_features = calculate_indicators(sample_data)
 
-    regressor = HybridPriceRegressor(lookback_period=50, input_features=len(features))
-    X = regressor.prepare_data(df_features)
-    labels = np.array(create_labels(sample_data)[regressor.lookback_period:])  # Align labels with X
-
+    # Scale features before windowing
     scaler_X = MinMaxScaler()
+    df_features_scaled = pd.DataFrame(
+        scaler_X.fit_transform(df_features[features]),
+        columns=features,
+        index=df_features.index
+    )
 
-    train_size = int(0.8 * len(df_features))
-    train_df = df_features[:train_size]
-    test_df = df_features[train_size:]
+    regressor = HybridPriceRegressor(lookback_period=50, input_features=len(features))
+    X = regressor.prepare_data(df_features_scaled)
+    labels = np.array(create_labels(sample_data)[regressor.lookback_period:])
 
-    train_df = scaler_X.fit_transform(train_df[features])
-    test_df = scaler_X.transform(test_df[features])
-
+    train_size = int(0.8 * len(X))
+    train_df = X[:train_size]
+    test_df = X[train_size:]
     train_labels = labels[:train_size]
     test_labels = labels[train_size:]
 
     regressor.train_model(train_df, train_labels, batch_size=64, validation_split=0.2, patience=10)
 
-    predictions = regressor.predict(test_df)
-    print("Sample predictions (first 500):")
-    for i, pred in enumerate(predictions[:500]):
+    predictions = regressor.predict(df_features_scaled[train_size + regressor.lookback_period:])
+    print("Sample predictions (first 5):")
+    for i, pred in enumerate(predictions[:5]):
         print(f"Prediction {i + 1}: {pred}")
 
     loss, mae = regressor.evaluate(test_df, test_labels)
-    print(f"Evaluation Loss (MSE): {loss:.4f}, MAE: {mae:.4f}")
