@@ -273,7 +273,7 @@ if __name__ == "__main__":
     test_data = sample_data[train_size:]  # Last 20%
 
     regressor = HybridPriceRegressor(lookback_period=50, input_features=4)
-    regressor.train_model(train_data, epochs=50, batch_size=32, validation_split=0.2, patience=10)
+    regressor.train_model(train_data, epochs=50, batch_size=64, validation_split=0.2, patience=10)
 
     predictions = regressor.predict(test_data)
     print("Sample predictions (first 5):")
