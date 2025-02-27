@@ -39,16 +39,21 @@ regressor.create_labels(test_data)  # Generate labels if necessary
 predictions = regressor.predict(test_data)  # Generate predictions for test_data
 end_prediction_time = time.time()  # Record end time
 
-# Ensure predictions are scalar values
-predictions = [float(pred[0]) if isinstance(pred, list) else float(pred) for pred in predictions]
-
-# Output predictions with corresponding timestamps and OHLC values
-print("All predictions with timestamps and OHLC values:")
+# Output predictions with corresponding timestamps, OHLC values, and full predictions
+print("All predictions with timestamps, OHLC values, and full predictions:")
 for i, (timestamp, open_, high, low, close, pred) in enumerate(zip(
         test_data['timestamp'], test_data['open'], test_data['high'], test_data['low'], test_data['close'], predictions
 )):
+    # Ensure predictions have 6 elements
+    if isinstance(pred, (list, tuple)) and len(pred) == 6:
+        pred_values = ', '.join([f"{float(p):.4f}" for p in pred])  # Format all 6 elements of prediction
+    else:
+        raise ValueError(f"Prediction does not have 6 elements: {pred}")
+
     print(
-        f"{i + 1} | Timestamp: {timestamp} | Open: {open_:.4f} | High: {high:.4f} | Low: {low:.4f} | Close: {close:.4f} | Prediction: {pred:.4f}")
+        f"{i + 1} | Timestamp: {timestamp} | Open: {open_:.4f} | High: {high:.4f} | Low: {low:.4f} | Close: {close:.4f} | Predictions: [{pred_values}]"
+    )
+
 
 print(f"Prediction completed in: {end_prediction_time - start_prediction_time:.2f} seconds")
 
