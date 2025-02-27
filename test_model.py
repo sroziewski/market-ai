@@ -269,7 +269,7 @@ if __name__ == "__main__":
     BASE_DIR = os.getenv("BASE_DIR")
     if BASE_DIR is None:
         raise ValueError("Environment variable 'BASE_DIR' not set")
-    file_path = f"{BASE_DIR}/data/crypto/klines/BTCUSDT/BTCUSDT_15m_80.csv"
+    file_path = f"{BASE_DIR}/data/crypto/klines/BTCUSDT/BTCUSDT_15m.csv"
     sample_data = pd.read_csv(file_path)
 
     regressor = HybridPriceRegressor(lookback_period=50, input_features=4)
