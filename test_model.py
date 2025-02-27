@@ -66,17 +66,18 @@ class PriceDataset(Dataset):
 
 # HybridPriceRegressor Model Definition
 class HybridPriceRegressor(nn.Module):
-    def __init__(self, lookback_period=50, input_features=4, cnn_filters=32, lstm_units=64, dropout_rate=0.3,
-                 attention_heads=4):
+    def __init__(self, lookback_period=20, input_features=4, cnn_filters=32, lstm_units=128, dropout_rate=0.3,
+                 attention_heads=4, num_outputs=6):
         super(HybridPriceRegressor, self).__init__()
         self.scaler_X = MinMaxScaler()
         self.scaler_y = MinMaxScaler()
-        self.lookback_period = lookback_period
+        self.lookback_period = lookback_period  # Reduced to 20
         self.input_features = input_features
         self.cnn_filters = cnn_filters
-        self.lstm_units = lstm_units
+        self.lstm_units = lstm_units  # Now 128
         self.dropout_rate = dropout_rate
         self.attention_heads = attention_heads
+        self.num_outputs = num_outputs  # 6 or 9, depending on labels
 
         # Cache for labels
         self.cached_labels = None
@@ -85,28 +86,28 @@ class HybridPriceRegressor(nn.Module):
         self.conv1 = nn.Conv1d(in_channels=input_features, out_channels=cnn_filters,
                                kernel_size=3, padding=1)
         self.bn1 = nn.BatchNorm1d(cnn_filters)
-        self.pool1 = nn.AdaptiveMaxPool1d(output_size=lookback_period // 2)  # Updated to AdaptiveMaxPool1d
+        self.pool1 = nn.MaxPool1d(kernel_size=2, stride=2)  # Less aggressive pooling
         self.conv2 = nn.Conv1d(cnn_filters, cnn_filters * 2, kernel_size=3,
                                padding=1)
         self.bn2 = nn.BatchNorm1d(cnn_filters * 2)
-        self.pool2 = nn.AdaptiveMaxPool1d(output_size=lookback_period // 4)  # Updated to AdaptiveMaxPool1d
+        self.pool2 = nn.MaxPool1d(kernel_size=2, stride=2)
 
-        # LSTM Temporal Processing
+        # LSTM Temporal Processing (increased to 128 units)
         self.lstm1 = nn.LSTM(cnn_filters * 2, lstm_units, batch_first=True)
-        self.lstm2 = nn.LSTM(lstm_units, lstm_units // 2, batch_first=True)
+        self.lstm2 = nn.LSTM(lstm_units, lstm_units // 2, batch_first=True)  # 128 → 64
 
-        # Attention Layer
+        # Attention Layer (embed_dim now 64, since lstm_units // 2 = 128 // 2)
         self.attention = nn.MultiheadAttention(embed_dim=lstm_units // 2,
                                                num_heads=attention_heads,
                                                dropout=dropout_rate,
                                                batch_first=True)
 
         # Fully Connected Layers for Output
-        self.fc1 = nn.Linear(lstm_units // 2, 64)
+        self.fc1 = nn.Linear(lstm_units // 2, 64)  # 64 → 64
         self.dropout1 = nn.Dropout(dropout_rate)
         self.fc2 = nn.Linear(64, 32)
         self.dropout2 = nn.Dropout(dropout_rate)
-        self.fc3 = nn.Linear(32, 6)  # 6 output dimensions
+        self.fc3 = nn.Linear(32, num_outputs)  # 6 or 9 outputs
 
     def forward(self, x):
         # CNN Feature Extraction
@@ -117,17 +118,17 @@ class HybridPriceRegressor(nn.Module):
         x = self.pool2(x)
         # LSTM Processing
         x = x.transpose(1, 2)  # (batch, seq_len, features)
-        x, _ = self.lstm1(x)
-        x, _ = self.lstm2(x)  # Shape: (batch, seq_len, lstm_units // 2)
+        x, _ = self.lstm1(x)  # (batch, seq_len, 128)
+        x, _ = self.lstm2(x)  # (batch, seq_len, 64)
         # Attention Mechanism
-        attn_output, _ = self.attention(x, x, x)  # Self-attention
-        x = attn_output.mean(dim=1)  # Mean across sequence length: (batch, lstm_units // 2)
+        attn_output, _ = self.attention(x, x, x)  # Self-attention: (batch, seq_len, 64)
+        x = attn_output[:, -1, :]  # Last time step: (batch, 64)
         # Fully Connected Layers
         x = torch.relu(self.fc1(x))
         x = self.dropout1(x)
         x = torch.relu(self.fc2(x))
         x = self.dropout2(x)
-        x = self.fc3(x)  # (batch, 6)
+        x = self.fc3(x)  # (batch, num_outputs)
         return x
 
     def prepare_data(self, klines_df):
