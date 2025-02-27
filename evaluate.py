@@ -28,6 +28,7 @@ regressor.eval()  # Set model to evaluation mode
 
 # Measure prediction time
 start_prediction_time = time.time()  # Record start time
+regressor.create_labels(test_data)  # Generate predictions for test_data
 predictions = regressor.predict(test_data)  # Generate predictions for test_data
 end_prediction_time = time.time()  # Record end time
 
