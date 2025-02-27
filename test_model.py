@@ -183,7 +183,6 @@ class HybridPriceRegressor(nn.Module):
             with tqdm(train_loader, desc=f"Epoch {epoch + 1}/{epochs}", unit="batch") as pbar:
                 for X_batch, y_batch in pbar:
                     X_batch, y_batch = X_batch.to(device), y_batch.to(device)  # Ensure data on GPU
-                    print(f"X_batch: {X_batch.device}, y_batch: {y_batch.device}")  # Debugging step
 
                     optimizer.zero_grad()
                     y_pred = self(X_batch)
