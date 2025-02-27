@@ -274,20 +274,21 @@ if __name__ == "__main__":
     sample_data = pd.read_csv(file_path)
 
     regressor = HybridPriceRegressor(lookback_period=50, input_features=4)
-    X = regressor.prepare_data(sample_data)
 
-    train_size = int(0.8 * len(X))
-    train_df = pd.DataFrame(X[:train_size], columns=['open', 'high', 'low', 'close'])
-    test_df = pd.DataFrame(X[train_size:], columns=['open', 'high', 'low', 'close'])
+    train_size = int(0.8 * len(sample_data))
+    x_train = sample_data[:train_size]
+    x_test = sample_data[train_size:]
 
-    regressor.train_model(train_df, epochs=50, batch_size=32,
+    X = regressor.prepare_data(x_test)
+
+    regressor.train_model(x_train, epochs=50, batch_size=32,
                           validation_split=0.2, patience=10)
 
-    predictions = regressor.predict(test_df)
+    predictions = regressor.predict(x_test)
     print("Sample predictions (first 5):")
     for i, pred in enumerate(predictions[:5]):
         print(f"Prediction {i + 1}: {pred}")
 
-    loss, mae = regressor.evaluate(test_df)
+    loss, mae = regressor.evaluate(x_test)
     print(f"Evaluation Loss (MSE): {loss:.4f}, MAE: {mae:.4f}")
 
