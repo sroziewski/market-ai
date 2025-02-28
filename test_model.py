@@ -142,6 +142,7 @@ class HybridPriceRegressor(nn.Module):
         if self.cached_labels is not None:
             return self.cached_labels
 
+
         open_prices = klines_df['open'].values
         close_prices = klines_df['close'].values
         high_prices = klines_df['high'].values
