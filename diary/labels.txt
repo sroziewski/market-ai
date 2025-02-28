@@ -72,3 +72,43 @@
             np.max(high_prices[window_50]),
         ])
     return local_y
+
+3. def process_batch(args):
+    """
+    Processes a batch of data based on specific window sizes and extracts statistical
+    metrics like the minimum and maximum of specified price ranges. The function
+    utilizes sliding windows of 5, 10, 20, and 50 rows to compute these metrics for
+    each row in the given range, making it suitable for financial data analysis or
+    similar use cases.
+
+    :param args: A tuple containing the row range, low prices, high prices, close
+        prices, and the total number of rows. The parameters within the tuple
+        must adhere to the following order:
+        - row_range (range): Range object indicating the rows to include.
+        - low_prices (numpy.ndarray): Array of low price values.
+        - high_prices (numpy.ndarray): Array of high price values.
+        - close_prices (numpy.ndarray): Array of close price values.
+        - total_rows (int): Total number of rows in the dataset.
+
+    :return: A list of lists where each inner list contains computed minimum and
+        maximum values for the specified sliding window rules.
+    :rtype: list
+    """
+    row_range, low_prices, high_prices, close_prices, total_rows = args
+    local_y = []
+    for i in row_range:
+        window_5 = slice(i, min(i + 5, total_rows))
+        window_10 = slice(i, min(i + 10, total_rows))
+        window_20 = slice(i, min(i + 20, total_rows))
+        window_50 = slice(i, min(i + 50, total_rows))
+        local_y.append([
+            np.min(low_prices[window_5]),
+            np.max(low_prices[window_5]),
+            np.min(low_prices[window_10]),
+            np.max(high_prices[window_10]),
+            np.min(low_prices[window_20]),
+            np.max(high_prices[window_20]),
+            np.min(low_prices[window_50]),
+            np.max(high_prices[window_50]),
+        ])
+    return local_y
