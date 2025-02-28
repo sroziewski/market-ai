@@ -187,7 +187,7 @@ class HybridPriceRegressor(nn.Module):
 
         train_dataset = PriceDataset(X_train, y_train)
         val_dataset = PriceDataset(X_val, y_val)
-        train_loader = DataLoader(train_dataset, batch_size=batch_size)
+        train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
         val_loader = DataLoader(val_dataset, batch_size=batch_size)
 
         optimizer = optim.Adam(self.parameters(), lr=0.001, weight_decay=1e-5)
