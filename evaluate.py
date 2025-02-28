@@ -18,7 +18,7 @@ file_path = f"{BASE_DIR}/data/crypto/klines/ETHUSDT/ETHUSDT_1d.csv"
 test_data = pd.read_csv(file_path)
 
 # Ensure OHLC columns contain scalar values
-for col in ['open', 'high', 'low', 'close']:
+for col in ['open', 'high', 'low', 'close', 'volume']:
     test_data[col] = test_data[col].apply(lambda x: x[0] if isinstance(x, list) else x).astype(float)
 
 # Ensure 'timestamp' is a scalar value (optional: convert to datetime)
