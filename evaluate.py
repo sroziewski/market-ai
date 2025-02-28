@@ -26,7 +26,7 @@ if 'timestamp' in test_data.columns:
     test_data['timestamp'] = test_data['timestamp'].apply(lambda x: x[0] if isinstance(x, list) else x)
 
 # Instantiate your model class
-regressor = HybridPriceRegressor(lookback_period=50, input_features=4)
+regressor = HybridPriceRegressor(lookback_period=50, input_features=5)
 
 # Load the saved model
 model_path = "final_hybrid_price_regressor2.pth"
