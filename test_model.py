@@ -191,12 +191,12 @@ class HybridPriceRegressor(nn.Module):
 
         return y_scaled
 
-    def train_model(self, klines_df, epochs=200, batch_size=64, validation_split=0.2, patience=10, device='cuda',
+    def train_model(self, klines_df, epochs=50, batch_size=64, validation_split=0.2, patience=10, device='cuda',
                     save_path="hybrid_price_regressor2.pth"):
         self.to(device)
 
         # Prepare data
-        X, _ = self.prepare_data(klines_df)
+        X, _, _ = self.prepare_data(klines_df)
         y = self.create_labels(klines_df)  # Called only once and cached
         split_idx = int(len(X) * (1 - validation_split))
         X_train, X_val = X[:split_idx], X[split_idx:]
@@ -204,7 +204,7 @@ class HybridPriceRegressor(nn.Module):
 
         train_dataset = PriceDataset(X_train, y_train)
         val_dataset = PriceDataset(X_val, y_val)
-        train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+        train_loader = DataLoader(train_dataset, batch_size=batch_size)
         val_loader = DataLoader(val_dataset, batch_size=batch_size)
 
         optimizer = optim.Adam(self.parameters(), lr=0.001, weight_decay=1e-5)
