@@ -27,7 +27,7 @@ def create_prediction_df(predictions, test_data, window_size):
         'window_20_min': [],
         'window_20_max': [],
         'window_50_min': [],
-        'window_50_ma': [],
+        'window_50_max': [],
         'close': []  # Add a 'close' column to include actual close prices
     }
 

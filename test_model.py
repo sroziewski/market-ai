@@ -12,47 +12,42 @@ from sklearn.preprocessing import MinMaxScaler
 from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm  # For progress bar support
 
-from features import calculate_percentage_change
-
 load_dotenv()
 
 features = ['open', 'high', 'low', 'close', 'volume']
 
+
 def process_batch(args):
     """
-    Processes a batch of stock data to calculate local statistics over
-    different time windows for each row in the specified range. The function
-    operates on given slices of `low_prices`, `high_prices`, and other required
-    data and computes the minimum and maximum prices over 10-day, 20-day, and
-    50-day time windows for every row in the `row_range`.
+    Processes a batch of data based on specific window sizes and extracts statistical
+    metrics like the minimum and maximum of specified price ranges. The function
+    utilizes sliding windows of 5, 10, 20, and 50 rows to compute these metrics for
+    each row in the given range, making it suitable for financial data analysis or
+    similar use cases.
 
-    :param args: A tuple containing the arguments required for processing the
-                 batch:
+    :param args: A tuple containing the row range, low prices, high prices, close
+        prices, and the total number of rows. The parameters within the tuple
+        must adhere to the following order:
+        - row_range (range): Range object indicating the rows to include.
+        - low_prices (numpy.ndarray): Array of low price values.
+        - high_prices (numpy.ndarray): Array of high price values.
+        - close_prices (numpy.ndarray): Array of close price values.
+        - total_rows (int): Total number of rows in the dataset.
 
-                 - row_range: An iterable specifying the range of rows to process.
-                 - low_prices: A numpy array containing the low prices of stocks.
-                 - high_prices: A numpy array containing the high prices of stocks.
-                 - close_prices: A numpy array containing the closing prices of
-                   stocks (not directly utilized in this function).
-                 - total_rows: An integer representing the total number of rows
-                   in the dataset.
-
-    :return: A list of lists where each sub-list contains the following statistics
-             computed for a row in the `row_range`:
-             - Minimum low price over the last 10 days.
-             - Maximum high price over the last 10 days.
-             - Minimum low price over the last 20 days.
-             - Maximum high price over the last 20 days.
-             - Minimum low price over the last 50 days.
-             - Maximum high price over the last 50 days.
+    :return: A list of lists where each inner list contains computed minimum and
+        maximum values for the specified sliding window rules.
+    :rtype: list
     """
     row_range, low_prices, high_prices, close_prices, total_rows = args
     local_y = []
     for i in row_range:
+        window_5 = slice(i, min(i + 5, total_rows))
         window_10 = slice(i, min(i + 10, total_rows))
         window_20 = slice(i, min(i + 20, total_rows))
         window_50 = slice(i, min(i + 50, total_rows))
         local_y.append([
+            np.min(low_prices[window_5]),
+            np.max(low_prices[window_5]),
             np.min(low_prices[window_10]),
             np.max(high_prices[window_10]),
             np.min(low_prices[window_20]),
@@ -81,7 +76,7 @@ class PriceDataset(Dataset):
 # HybridPriceRegressor Model Definition
 class HybridPriceRegressor(nn.Module):
     def __init__(self, lookback_period=20, input_features=4, cnn_filters=32, lstm_units=128, dropout_rate=0.3,
-                 attention_heads=4, num_outputs=6):
+                 attention_heads=4, num_outputs=8):
         super(HybridPriceRegressor, self).__init__()
         self.scaler_X = MinMaxScaler()
         self.scaler_y = MinMaxScaler()
@@ -194,7 +189,8 @@ class HybridPriceRegressor(nn.Module):
         pred/target shape: (batch, 6) [min_low_20, max_high_20, mean_close_20, min_low_50, max_high_50, mean_close_50]
         """
         mse = nn.MSELoss(reduction='none')
-        weights = torch.tensor([1.0, 1.0, 0.75, 0.75, 0.5, 0.5], device=pred.device)  # 10-step: 1.0,  20-step: .75, 50-step: 0.5
+        weights = torch.tensor([1.0, 1.0, 0.75, 0.75, 0.5, 0.5, 0.25, 0.25],
+                               device=pred.device)  # 10-step: 1.0,  20-step: .75, 50-step: 0.5
         loss = mse(pred, target) * weights
         return loss.mean()
 
