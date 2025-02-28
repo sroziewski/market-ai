@@ -35,7 +35,6 @@ def process_batch(args):
     """
     row_range, low_prices, high_prices, close_prices, total_rows = args
     local_y = []
-
     for i in row_range:
         window_20 = slice(i, min(i + 20, total_rows))
         window_50 = slice(i, min(i + 50, total_rows))
