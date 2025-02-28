@@ -7,6 +7,44 @@ from dotenv import load_dotenv
 from test_model import HybridPriceRegressor
 
 
+def create_prediction_df(predictions):
+    """
+    Create a DataFrame from predictions with the specific 6-dimensional list values
+    mapped to the following columns:
+    window_10_min, window_10_max, window_20_min, window_20_max, window_50_min, window_50_max.
+
+    Args:
+        predictions (list of lists): A list of 6-dimensional lists containing prediction values.
+
+    Returns:
+        pd.DataFrame: A DataFrame containing those specific columns.
+    """
+    # Ensure all predictions are 6-dimensional
+    data = {
+        'window_10_min': [],
+        'window_10_max': [],
+        'window_20_min': [],
+        'window_20_max': [],
+        'window_50_min': [],
+        'window_50_max': []
+    }
+
+    for pred in predictions:
+        if isinstance(pred, (list, tuple)) and len(pred) == 6:
+            # Map first 6 dimensions directly to the specific columns
+            data['window_10_min'].append(pred[0])
+            data['window_10_max'].append(pred[1])
+            data['window_20_min'].append(pred[2])
+            data['window_20_max'].append(pred[3])
+            data['window_50_min'].append(pred[4])
+            data['window_50_max'].append(pred[5])
+        else:
+            raise ValueError(f"Prediction does not have 6 elements: {pred}")
+
+    # Create DataFrame from the data dictionary
+    return pd.DataFrame(data)
+
+
 def main():
     # Load environment variables
     load_dotenv()
@@ -86,6 +124,10 @@ def main():
         )
 
     print(f"Prediction completed in: {end_prediction_time - start_prediction_time:.2f} seconds")
+
+    prediction_df = create_prediction_df(predictions)
+    print("Prediction DataFrame:")
+    print(prediction_df.head())
 
     # Evaluate the model on the test dataset
     loss, mae = regressor.evaluate(test_data)
