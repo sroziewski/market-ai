@@ -20,31 +20,45 @@ features = ['open', 'high', 'low', 'close', 'volume']
 
 def process_batch(args):
     """
-    Process a batch of rows to create labels for the given range.
+    Processes a batch of stock data to calculate local statistics over
+    different time windows for each row in the specified range. The function
+    operates on given slices of `low_prices`, `high_prices`, and other required
+    data and computes the minimum and maximum prices over 10-day, 20-day, and
+    50-day time windows for every row in the `row_range`.
 
-    Arguments:
-        args (tuple): A tuple containing:
-            - row_range (range): Indices to process
-            - low_prices (np.ndarray): Array of low prices
-            - high_prices (np.ndarray): Array of high prices
-            - close_prices (np.ndarray): Array of close prices
-            - total_rows (int): Total number of rows in the dataset
+    :param args: A tuple containing the arguments required for processing the
+                 batch:
 
-    Returns:
-        list: A list of calculated labels for the rows in this batch
+                 - row_range: An iterable specifying the range of rows to process.
+                 - low_prices: A numpy array containing the low prices of stocks.
+                 - high_prices: A numpy array containing the high prices of stocks.
+                 - close_prices: A numpy array containing the closing prices of
+                   stocks (not directly utilized in this function).
+                 - total_rows: An integer representing the total number of rows
+                   in the dataset.
+
+    :return: A list of lists where each sub-list contains the following statistics
+             computed for a row in the `row_range`:
+             - Minimum low price over the last 10 days.
+             - Maximum high price over the last 10 days.
+             - Minimum low price over the last 20 days.
+             - Maximum high price over the last 20 days.
+             - Minimum low price over the last 50 days.
+             - Maximum high price over the last 50 days.
     """
     row_range, low_prices, high_prices, close_prices, total_rows = args
     local_y = []
     for i in row_range:
+        window_10 = slice(i, min(i + 10, total_rows))
         window_20 = slice(i, min(i + 20, total_rows))
         window_50 = slice(i, min(i + 50, total_rows))
         local_y.append([
+            np.min(low_prices[window_10]),
+            np.max(high_prices[window_10]),
             np.min(low_prices[window_20]),
             np.max(high_prices[window_20]),
-            np.mean(close_prices[window_20]),
             np.min(low_prices[window_50]),
             np.max(high_prices[window_50]),
-            np.mean(close_prices[window_50])
         ])
     return local_y
 
@@ -174,6 +188,16 @@ class HybridPriceRegressor(nn.Module):
 
         return y_scaled
 
+    def weighted_mse_loss(self, pred, target):
+        """
+        Weighted MSE loss prioritizing 20-step outputs over 50-step outputs.
+        pred/target shape: (batch, 6) [min_low_20, max_high_20, mean_close_20, min_low_50, max_high_50, mean_close_50]
+        """
+        mse = nn.MSELoss(reduction='none')
+        weights = torch.tensor([1.0, 1.0, 0.75, 0.75, 0.5, 0.5], device=pred.device)  # 10-step: 1.0,  20-step: .75, 50-step: 0.5
+        loss = mse(pred, target) * weights
+        return loss.mean()
+
     def train_model(self, klines_df, epochs=200, batch_size=64, validation_split=0.2, patience=10, device='cuda',
                     save_path="hybrid_price_regressor2.pth"):
         self.to(device)
@@ -203,13 +227,17 @@ class HybridPriceRegressor(nn.Module):
             self.train()  # Set to training mode
             train_loss = 0
             print(f"Epoch {epoch + 1}")  # Report device
+
+            # Retrieve the current learning rate from the optimizer
+            current_lr = optimizer.param_groups[0]['lr']
+
             with tqdm(train_loader, desc=f"Epoch {epoch + 1}/{epochs}", unit="batch") as pbar:
                 for X_batch, y_batch in pbar:
                     X_batch, y_batch = X_batch.to(device), y_batch.to(device)  # Ensure data on GPU
 
                     optimizer.zero_grad()
                     y_pred = self(X_batch)
-                    loss = criterion(y_pred, y_batch)
+                    loss = self.weighted_mse_loss(y_pred, y_batch)
                     loss.backward()
                     optimizer.step()
                     train_loss += loss.item()
@@ -228,7 +256,12 @@ class HybridPriceRegressor(nn.Module):
                     val_loss += criterion(y_pred, y_batch).item()
 
             val_loss /= len(val_loader)
-            print(f"Epoch {epoch + 1} - Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}")
+
+            # Print Training and Validation Loss along with current learning rate and patience counter
+            print(
+                f"Epoch {epoch + 1} - Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}, "
+                f"Current LR: {current_lr:.6f}, Patience Counter: {patience_counter}/{patience}"
+            )
 
             scheduler.step(val_loss)  # Adjust learning rate
 
@@ -275,8 +308,8 @@ class HybridPriceRegressor(nn.Module):
         y_tensor = torch.tensor(y, dtype=torch.float32).to(device)
         with torch.no_grad():
             y_pred = self(X_tensor)
-            mse = nn.MSELoss()(y_pred, y_tensor).item()
-            mae = torch.mean(torch.abs(y_pred - y_tensor)).item()
+            mse = self.weighted_mse_loss(y_pred, y_tensor).item()  # Use weighted loss
+            mae = torch.mean(torch.abs(y_pred - y_tensor)).item()  # Keep MAE unweighted
         return [mse, mae]
 
 
@@ -301,19 +334,10 @@ if __name__ == "__main__":
 
     # Measure training time
     start_train_time = time.time()  # Record start time
-    regressor.train_model(sample_data, epochs=100, batch_size=64, validation_split=0.2, patience=20, device=device)
+    regressor.train_model(sample_data, epochs=100, batch_size=64, validation_split=0.2, patience=20, device=device,
+                          save_path="hybrid_price_regressor_l2_m3.pth")
     end_train_time = time.time()  # Record end time
     print(f"Training completed in: {end_train_time - start_train_time:.2f} seconds")
-
-    # Uncomment if predictions on the training set are needed
-    # Measure prediction time
-    start_prediction_time = time.time()  # Record start time
-    predictions = regressor.predict(sample_data)
-    end_prediction_time = time.time()  # Record end time
-    print("Sample predictions (first 5):")
-    for i, pred in enumerate(predictions[:5]):
-        print(f"Prediction {i + 1}: {pred}")
-    print(f"Prediction completed in: {end_prediction_time - start_prediction_time:.2f} seconds")
 
     # Evaluate the model on the test dataset
     loss, mae = regressor.evaluate(test_data)
