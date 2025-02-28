@@ -297,11 +297,11 @@ if __name__ == "__main__":
     BASE_DIR = os.getenv("BASE_DIR")
     if BASE_DIR is None:
         raise ValueError("Environment variable 'BASE_DIR' not set")
-
     # Load data files
-    file_path = f"{BASE_DIR}/data/crypto/klines/BTCUSDT/BTCUSDT_15m.csv"
+    file_path = f"{BASE_DIR}/data/crypto/klines/ETHUSDT/ETHUSDT_1d.csv"
     sample_data = pd.read_csv(file_path)
-    file_path = f"{BASE_DIR}/data/crypto/klines/ETHUSDT/ETHUSDT_15m.csv"
+    # file_path = f"{BASE_DIR}/data/crypto/klines/BTCUSDT/BTCUSDT_15m.csv"
+    file_path = f"{BASE_DIR}/data/crypto/klines/ETHUSDT/ETHUSDT_1d.csv"
     test_data = pd.read_csv(file_path)
 
     # Initialize the regressor
@@ -316,7 +316,7 @@ if __name__ == "__main__":
     # Uncomment if predictions on the training set are needed
     # Measure prediction time
     start_prediction_time = time.time()  # Record start time
-    predictions = regressor.predict(sample_data)
+    predictions = regressor.predict(test_data)
     end_prediction_time = time.time()  # Record end time
     print("Sample predictions (first 5):")
     for i, pred in enumerate(predictions[:5]):

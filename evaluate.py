@@ -41,9 +41,23 @@ end_prediction_time = time.time()  # Record end time
 
 # Output predictions with corresponding timestamps, OHLC values, and full predictions
 print("All predictions with timestamps, OHLC values, and full predictions:")
-for i, (timestamp, open_, high, low, close, pred) in enumerate(zip(
-        test_data['timestamp'], test_data['open'], test_data['high'], test_data['low'], test_data['close'], predictions
-)):
+
+window_size = 50  # Prediction window size
+
+for i, (pred) in enumerate(predictions):
+    # The corresponding index in test_data based on the window size
+    index = i + window_size
+
+    # Ensure that we don't exceed the bounds of test_data
+    if index < len(test_data['timestamp']):
+        timestamp = test_data['timestamp'][index]
+        open_ = test_data['open'][index]
+        high = test_data['high'][index]
+        low = test_data['low'][index]
+        close = test_data['close'][index]
+    else:
+        raise IndexError(f"Index {index} out of range for test_data (length: {len(test_data['timestamp'])})")
+
     # Ensure predictions have 6 elements
     if isinstance(pred, (list, tuple)) and len(pred) == 6:
         pred_values = ', '.join([f"{float(p):.4f}" for p in pred])  # Format all 6 elements of prediction
@@ -53,6 +67,7 @@ for i, (timestamp, open_, high, low, close, pred) in enumerate(zip(
     print(
         f"{i + 1} | Timestamp: {timestamp} | Open: {open_:.4f} | High: {high:.4f} | Low: {low:.4f} | Close: {close:.4f} | Predictions: [{pred_values}]"
     )
+
 
 
 print(f"Prediction completed in: {end_prediction_time - start_prediction_time:.2f} seconds")
