@@ -133,9 +133,13 @@ class HybridPriceRegressor(nn.Module):
 
     def prepare_data(self, klines_df):
         data = klines_df[features].values
+        timestamps = klines_df.index
         data_scaled = self.scaler_X.fit_transform(data)
+        if len(data) < self.lookback_period:
+            return np.array([]), self.scaler_X, []
         X = [data_scaled[i - self.lookback_period:i] for i in range(self.lookback_period, len(data))]
-        return np.array(X), self.scaler_X
+        pred_timestamps = timestamps[self.lookback_period:]
+        return np.array(X), self.scaler_X, pred_timestamps
 
     def create_labels(self, klines_df, save_path=None):
         # Check if labels are already cached
@@ -260,11 +264,14 @@ class HybridPriceRegressor(nn.Module):
     def predict(self, klines_df, device='cuda'):
         self.to(device)
         self.eval()
-        X, _ = self.prepare_data(klines_df)
+        X, _, pred_timestamps = self.prepare_data(klines_df)
+        if len(X) == 0:
+            return []
         X_tensor = torch.tensor(X, dtype=torch.float32).to(device)
         with torch.no_grad():
             predictions_scaled = self(X_tensor).cpu().numpy()
         predictions = self.scaler_y.inverse_transform(predictions_scaled)
+        print(f"Prediction timestamps: {pred_timestamps[0]} to {pred_timestamps[-1]}")
         return predictions.tolist()
 
     def evaluate(self, klines_df, device='cuda'):
