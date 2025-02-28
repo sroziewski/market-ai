@@ -277,7 +277,7 @@ class HybridPriceRegressor(nn.Module):
     def evaluate(self, klines_df, device='cuda'):
         self.to(device)
         self.eval()
-        X, _ = self.prepare_data(klines_df)
+        X, _, _ = self.prepare_data(klines_df)
         y = self.create_labels(klines_df)
         X_tensor = torch.tensor(X, dtype=torch.float32).to(device)
         y_tensor = torch.tensor(y, dtype=torch.float32).to(device)
