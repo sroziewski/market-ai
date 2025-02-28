@@ -12,39 +12,52 @@ from sklearn.preprocessing import MinMaxScaler
 from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm  # For progress bar support
 
-from features import calculate_percentage_change
-
 load_dotenv()
 
 features = ['open', 'high', 'low', 'close', 'volume']
 
+
 def process_batch(args):
     """
-    Process a batch of rows to create labels for the given range.
+    Processes a batch of stock data to calculate local statistics over
+    different time windows for each row in the specified range. The function
+    operates on given slices of `low_prices`, `high_prices`, and other required
+    data and computes the minimum and maximum prices over 10-day, 20-day, and
+    50-day time windows for every row in the `row_range`.
 
-    Arguments:
-        args (tuple): A tuple containing:
-            - row_range (range): Indices to process
-            - low_prices (np.ndarray): Array of low prices
-            - high_prices (np.ndarray): Array of high prices
-            - close_prices (np.ndarray): Array of close prices
-            - total_rows (int): Total number of rows in the dataset
+    :param args: A tuple containing the arguments required for processing the
+                 batch:
 
-    Returns:
-        list: A list of calculated labels for the rows in this batch
+                 - row_range: An iterable specifying the range of rows to process.
+                 - low_prices: A numpy array containing the low prices of stocks.
+                 - high_prices: A numpy array containing the high prices of stocks.
+                 - close_prices: A numpy array containing the closing prices of
+                   stocks (not directly utilized in this function).
+                 - total_rows: An integer representing the total number of rows
+                   in the dataset.
+
+    :return: A list of lists where each sub-list contains the following statistics
+             computed for a row in the `row_range`:
+             - Minimum low price over the last 10 days.
+             - Maximum high price over the last 10 days.
+             - Minimum low price over the last 20 days.
+             - Maximum high price over the last 20 days.
+             - Minimum low price over the last 50 days.
+             - Maximum high price over the last 50 days.
     """
     row_range, low_prices, high_prices, close_prices, total_rows = args
     local_y = []
     for i in row_range:
+        window_10 = slice(i, min(i + 10, total_rows))
         window_20 = slice(i, min(i + 20, total_rows))
         window_50 = slice(i, min(i + 50, total_rows))
         local_y.append([
+            np.min(low_prices[window_10]),
+            np.max(high_prices[window_10]),
             np.min(low_prices[window_20]),
             np.max(high_prices[window_20]),
-            np.mean(close_prices[window_20]),
             np.min(low_prices[window_50]),
             np.max(high_prices[window_50]),
-            np.mean(close_prices[window_50])
         ])
     return local_y
 
@@ -145,7 +158,6 @@ class HybridPriceRegressor(nn.Module):
         # Check if labels are already cached
         if self.cached_labels is not None:
             return self.cached_labels
-
 
         open_prices = klines_df['open'].values
         close_prices = klines_df['close'].values
@@ -298,9 +310,8 @@ if __name__ == "__main__":
     if BASE_DIR is None:
         raise ValueError("Environment variable 'BASE_DIR' not set")
     # Load data files
-    file_path = f"{BASE_DIR}/data/crypto/klines/ETHUSDT/ETHUSDT_1d.csv"
+    file_path = f"{BASE_DIR}/data/crypto/klines/BTCUSDT/BTCUSDT_15m.csv"
     sample_data = pd.read_csv(file_path)
-    # file_path = f"{BASE_DIR}/data/crypto/klines/BTCUSDT/BTCUSDT_15m.csv"
     file_path = f"{BASE_DIR}/data/crypto/klines/ETHUSDT/ETHUSDT_1d.csv"
     test_data = pd.read_csv(file_path)
 
@@ -309,19 +320,9 @@ if __name__ == "__main__":
 
     # Measure training time
     start_train_time = time.time()  # Record start time
-    regressor.train_model(sample_data, epochs=50, batch_size=64, validation_split=0.2, patience=10, device=device)
+    regressor.train_model(sample_data, epochs=100, batch_size=64, validation_split=0.2, patience=20, device=device)
     end_train_time = time.time()  # Record end time
     print(f"Training completed in: {end_train_time - start_train_time:.2f} seconds")
-
-    # Uncomment if predictions on the training set are needed
-    # Measure prediction time
-    start_prediction_time = time.time()  # Record start time
-    predictions = regressor.predict(test_data)
-    end_prediction_time = time.time()  # Record end time
-    print("Sample predictions (first 5):")
-    for i, pred in enumerate(predictions[:5]):
-        print(f"Prediction {i + 1}: {pred}")
-    print(f"Prediction completed in: {end_prediction_time - start_prediction_time:.2f} seconds")
 
     # Evaluate the model on the test dataset
     loss, mae = regressor.evaluate(test_data)
