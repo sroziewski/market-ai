@@ -126,8 +126,16 @@ def main():
     print(f"Prediction completed in: {end_prediction_time - start_prediction_time:.2f} seconds")
 
     prediction_df = create_prediction_df(predictions)
-    print("Prediction DataFrame:")
-    print(prediction_df.head())
+    # Extract model name and file name without `.csv` for saving the predictions
+    model_name = os.path.basename(model_path).replace('.pth', '')  # Get model name (exclude '.pth')
+    data_name = os.path.basename(data_file).replace('.csv', '')  # Get data file name (exclude '.csv')
+
+    # Construct the output file name
+    output_file_name = f"predictions/{model_name}_{data_name}.csv"
+
+    # Save the DataFrame to the constructed output file name
+    prediction_df.to_csv(output_file_name, index=False)
+    print(f"Prediction DataFrame saved to: {output_file_name}")
 
     # Evaluate the model on the test dataset
     loss, mae = regressor.evaluate(test_data)
