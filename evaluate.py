@@ -22,6 +22,8 @@ def create_prediction_df(predictions, test_data, window_size):
     """
     # Ensure all predictions are 6-dimensional
     data = {
+        'window_5_min': [],
+        'window_5_max': [],
         'window_10_min': [],
         'window_10_max': [],
         'window_20_min': [],
@@ -36,19 +38,21 @@ def create_prediction_df(predictions, test_data, window_size):
         index = i + window_size  # Adjust for the window size
 
         # Include all predictions and 'close' column only if the index is valid
-        if isinstance(pred, (list, tuple)) and len(pred) == 6 and index < len(test_data):
+        if isinstance(pred, (list, tuple)) and len(pred) == 8 and index < len(test_data):
             # Add prediction data
-            data['window_10_min'].append(pred[0])
-            data['window_10_max'].append(pred[1])
-            data['window_20_min'].append(pred[2])
-            data['window_20_max'].append(pred[3])
-            data['window_50_min'].append(pred[4])
-            data['window_50_ma'].append(pred[5])
+            data['window_5_min'].append(pred[0])
+            data['window_5_max'].append(pred[1])
+            data['window_10_min'].append(pred[2])
+            data['window_10_max'].append(pred[3])
+            data['window_20_min'].append(pred[4])
+            data['window_20_max'].append(pred[5])
+            data['window_50_min'].append(pred[6])
+            data['window_50_max'].append(pred[7])
 
             # Add the 'close' price from the test_data
             data['close'].append(test_data['close'][index])
         else:
-            raise ValueError(f"Prediction does not have 6 elements or index out of range: {pred}")
+            raise ValueError(f"Prediction does not have 8 elements or index out of range: {pred}")
 
     # Create DataFrame from the data dictionary
     return pd.DataFrame(data)
@@ -108,31 +112,31 @@ def main():
     window_size = 50  # Prediction window size
 
     # Process and print predictions
-    for i, (pred) in enumerate(predictions):
-        # The corresponding index in test_data based on the window size
-        index = i + window_size
-
-        # Ensure valid index range for data retrieval
-        if index < len(test_data['timestamp']):
-            timestamp = test_data['timestamp'][index]
-            open_ = test_data['open'][index]
-            high = test_data['high'][index]
-            low = test_data['low'][index]
-            close = test_data['close'][index]
-        else:
-            raise IndexError(f"Index {index} out of range for test_data (length: {len(test_data['timestamp'])})")
-
-        # Ensure predictions have 6 elements
-        if isinstance(pred, (list, tuple)) and len(pred) == 6:
-            pred_values = ', '.join([f"{float(p):.4f}" for p in pred])  # Format prediction values
-        else:
-            raise ValueError(f"Prediction does not have 6 elements: {pred}")
-
-        print(
-            f"{i + 1} | Timestamp: {timestamp} | Open: {open_:.4f} | High: {high:.4f} | Low: {low:.4f} | Close: {close:.4f} | Predictions: [{pred_values}]"
-        )
-
-    print(f"Prediction completed in: {end_prediction_time - start_prediction_time:.2f} seconds")
+    # for i, (pred) in enumerate(predictions):
+    #     # The corresponding index in test_data based on the window size
+    #     index = i + window_size
+    #
+    #     # Ensure valid index range for data retrieval
+    #     if index < len(test_data['timestamp']):
+    #         timestamp = test_data['timestamp'][index]
+    #         open_ = test_data['open'][index]
+    #         high = test_data['high'][index]
+    #         low = test_data['low'][index]
+    #         close = test_data['close'][index]
+    #     else:
+    #         raise IndexError(f"Index {index} out of range for test_data (length: {len(test_data['timestamp'])})")
+    #
+    #     # Ensure predictions have 6 elements
+    #     if isinstance(pred, (list, tuple)) and len(pred) == 6:
+    #         pred_values = ', '.join([f"{float(p):.4f}" for p in pred])  # Format prediction values
+    #     else:
+    #         raise ValueError(f"Prediction does not have 6 elements: {pred}")
+    #
+    #     print(
+    #         f"{i + 1} | Timestamp: {timestamp} | Open: {open_:.4f} | High: {high:.4f} | Low: {low:.4f} | Close: {close:.4f} | Predictions: [{pred_values}]"
+    #     )
+    #
+    # print(f"Prediction completed in: {end_prediction_time - start_prediction_time:.2f} seconds")
 
     prediction_df = create_prediction_df(predictions, test_data, window_size)
     # Extract model name and file name without `.csv` for saving the predictions
