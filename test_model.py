@@ -75,7 +75,7 @@ class PriceDataset(Dataset):
 
 # HybridPriceRegressor Model Definition
 class HybridPriceRegressor(nn.Module):
-    def __init__(self, lookback_period=20, input_features=4, cnn_filters=32, lstm_units=128, dropout_rate=0.3,
+    def __init__(self, lookback_period=100, input_features=4, cnn_filters=32, lstm_units=128, dropout_rate=0.3,
                  attention_heads=4, num_outputs=8):
         super(HybridPriceRegressor, self).__init__()
         self.scaler_X = MinMaxScaler()
@@ -326,7 +326,7 @@ if __name__ == "__main__":
     test_data = pd.read_csv(file_path)
 
     # Initialize the regressor
-    regressor = HybridPriceRegressor(lookback_period=50, input_features=len(features))
+    regressor = HybridPriceRegressor(input_features=len(features))
 
     # Measure training time
     start_train_time = time.time()  # Record start time
