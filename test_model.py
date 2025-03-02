@@ -328,6 +328,8 @@ if __name__ == "__main__":
     # Initialize the regressor
     regressor = HybridPriceRegressor(input_features=len(features))
 
+    total_params = sum(param.numel() for param in regressor.parameters())
+    print(f"Total number of parameters: {total_params}")
     # Measure training time
     start_train_time = time.time()  # Record start time
     regressor.train_model(sample_data, epochs=100, batch_size=64, validation_split=0.2, patience=20, device=device,
