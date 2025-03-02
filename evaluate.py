@@ -102,37 +102,37 @@ def main():
     predictions = regressor.predict(test_data)  # Generate predictions for test_data
     end_prediction_time = time.time()
 
-    # Output predictions with timestamps, OHLC values, and full predictions
-    print("All predictions with timestamps, OHLC values, and full predictions:")
-
+    # # Output predictions with timestamps, OHLC values, and full predictions
+    # print("All predictions with timestamps, OHLC values, and full predictions:")
+    #
     window_size = 50  # Prediction window size
-
-    # Process and print predictions
-    for i, (pred) in enumerate(predictions):
-        # The corresponding index in test_data based on the window size
-        index = i + window_size
-
-        # Ensure valid index range for data retrieval
-        if index < len(test_data['timestamp']):
-            timestamp = test_data['timestamp'][index]
-            open_ = test_data['open'][index]
-            high = test_data['high'][index]
-            low = test_data['low'][index]
-            close = test_data['close'][index]
-        else:
-            raise IndexError(f"Index {index} out of range for test_data (length: {len(test_data['timestamp'])})")
-
-        # Ensure predictions have 6 elements
-        if isinstance(pred, (list, tuple)) and len(pred) == 6:
-            pred_values = ', '.join([f"{float(p):.4f}" for p in pred])  # Format prediction values
-        else:
-            raise ValueError(f"Prediction does not have 6 elements: {pred}")
-
-        print(
-            f"{i + 1} | Timestamp: {timestamp} | Open: {open_:.4f} | High: {high:.4f} | Low: {low:.4f} | Close: {close:.4f} | Predictions: [{pred_values}]"
-        )
-
-    print(f"Prediction completed in: {end_prediction_time - start_prediction_time:.2f} seconds")
+    #
+    # # Process and print predictions
+    # for i, (pred) in enumerate(predictions):
+    #     # The corresponding index in test_data based on the window size
+    #     index = i + window_size
+    #
+    #     # Ensure valid index range for data retrieval
+    #     if index < len(test_data['timestamp']):
+    #         timestamp = test_data['timestamp'][index]
+    #         open_ = test_data['open'][index]
+    #         high = test_data['high'][index]
+    #         low = test_data['low'][index]
+    #         close = test_data['close'][index]
+    #     else:
+    #         raise IndexError(f"Index {index} out of range for test_data (length: {len(test_data['timestamp'])})")
+    #
+    #     # Ensure predictions have 6 elements
+    #     if isinstance(pred, (list, tuple)) and len(pred) == 6:
+    #         pred_values = ', '.join([f"{float(p):.4f}" for p in pred])  # Format prediction values
+    #     else:
+    #         raise ValueError(f"Prediction does not have 6 elements: {pred}")
+    #
+    #     print(
+    #         f"{i + 1} | Timestamp: {timestamp} | Open: {open_:.4f} | High: {high:.4f} | Low: {low:.4f} | Close: {close:.4f} | Predictions: [{pred_values}]"
+    #     )
+    #
+    # print(f"Prediction completed in: {end_prediction_time - start_prediction_time:.2f} seconds")
 
     prediction_df = create_prediction_df(predictions, test_data, window_size)
     # Extract model name and file name without `.csv` for saving the predictions
