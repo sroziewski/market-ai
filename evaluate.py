@@ -22,6 +22,8 @@ def create_prediction_df(predictions, test_data, window_size):
     """
     # Ensure all predictions are 6-dimensional
     data = {
+        'window_5_min': [],
+        'window_5_max': [],
         'window_10_min': [],
         'window_10_max': [],
         'window_20_min': [],
@@ -36,19 +38,21 @@ def create_prediction_df(predictions, test_data, window_size):
         index = i + window_size  # Adjust for the window size
 
         # Include all predictions and 'close' column only if the index is valid
-        if isinstance(pred, (list, tuple)) and len(pred) == 6 and index < len(test_data):
+        if isinstance(pred, (list, tuple)) and len(pred) == 8 and index < len(test_data):
             # Add prediction data
+            data['window_5_min'].append(pred[0])
+            data['window_5_max'].append(pred[0])
             data['window_10_min'].append(pred[0])
             data['window_10_max'].append(pred[1])
             data['window_20_min'].append(pred[2])
             data['window_20_max'].append(pred[3])
             data['window_50_min'].append(pred[4])
-            data['window_50_ma'].append(pred[5])
+            data['window_50_max'].append(pred[5])
 
             # Add the 'close' price from the test_data
             data['close'].append(test_data['close'][index])
         else:
-            raise ValueError(f"Prediction does not have 6 elements or index out of range: {pred}")
+            raise ValueError(f"Prediction does not have 8 elements or index out of range: {pred}")
 
     # Create DataFrame from the data dictionary
     return pd.DataFrame(data)
