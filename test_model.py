@@ -75,7 +75,7 @@ class PriceDataset(Dataset):
 
 # HybridPriceRegressor Model Definition
 class HybridPriceRegressor(nn.Module):
-    def __init__(self, lookback_period=100, input_features=4, cnn_filters=32, lstm_units=128, dropout_rate=0.3,
+    def __init__(self, lookback_period=50, input_features=4, cnn_filters=32, lstm_units=128, dropout_rate=0.3,
                  attention_heads=4, num_outputs=8):
         super(HybridPriceRegressor, self).__init__()
         self.scaler_X = MinMaxScaler()
@@ -92,12 +92,10 @@ class HybridPriceRegressor(nn.Module):
         self.cached_labels = None
 
         # CNN Feature Extraction
-        self.conv1 = nn.Conv1d(in_channels=input_features, out_channels=cnn_filters,
-                               kernel_size=3, padding=1)
+        self.conv1 = nn.Conv1d(in_channels=input_features, out_channels=cnn_filters, kernel_size=3, padding=1)
         self.bn1 = nn.BatchNorm1d(cnn_filters)
         self.pool1 = nn.MaxPool1d(kernel_size=2, stride=2)  # Less aggressive pooling
-        self.conv2 = nn.Conv1d(cnn_filters, cnn_filters * 2, kernel_size=3,
-                               padding=1)
+        self.conv2 = nn.Conv1d(cnn_filters, cnn_filters * 2, kernel_size=3, padding=1)
         self.bn2 = nn.BatchNorm1d(cnn_filters * 2)
         self.pool2 = nn.MaxPool1d(kernel_size=2, stride=2)
 
