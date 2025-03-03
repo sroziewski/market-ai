@@ -94,10 +94,10 @@ class HybridPriceRegressor(nn.Module):
         # CNN Feature Extraction
         self.conv1 = nn.Conv1d(in_channels=input_features, out_channels=cnn_filters, kernel_size=3, padding=1)
         self.bn1 = nn.BatchNorm1d(cnn_filters)
-        self.pool1 = nn.MaxPool1d(kernel_size=2, stride=2)  # Less aggressive pooling
+        self.pool1 = nn.MaxPool1d(kernel_size=2, stride=1)  # Less aggressive pooling
         self.conv2 = nn.Conv1d(cnn_filters, cnn_filters * 2, kernel_size=3, padding=1)
         self.bn2 = nn.BatchNorm1d(cnn_filters * 2)
-        self.pool2 = nn.MaxPool1d(kernel_size=2, stride=2)
+        self.pool2 = nn.MaxPool1d(kernel_size=2, stride=1)
 
         # LSTM Temporal Processing (increased to 128 units)
         self.lstm1 = nn.LSTM(cnn_filters * 2, lstm_units, batch_first=True)
@@ -331,7 +331,7 @@ if __name__ == "__main__":
     # Measure training time
     start_train_time = time.time()  # Record start time
     regressor.train_model(sample_data, epochs=100, batch_size=64, validation_split=0.2, patience=20, device=device,
-                          save_path="hybrid_price_regressor_l3_m3_lb_100.pth")
+                          save_path="hybrid_price_regressor_l3_m6_lb_50.pth")
     end_train_time = time.time()  # Record end time
     print(f"Training completed in: {end_train_time - start_train_time:.2f} seconds")
 
