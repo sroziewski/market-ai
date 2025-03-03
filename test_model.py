@@ -138,6 +138,16 @@ class HybridPriceRegressor(nn.Module):
         x = self.fc3(x)  # (batch, num_outputs)
         return x
 
+    def weighted_mse_loss(self, pred, target):
+        """
+        Weighted MSE loss prioritizing 20-step outputs over 50-step outputs.
+        pred/target shape: (batch, 6) [min_low_20, max_high_20, mean_close_20, min_low_50, max_high_50, mean_close_50]
+        """
+        mse = nn.MSELoss(reduction='none')
+        weights = torch.tensor([0.5, 2.5, 0.5, 2.0, 0.5, 1.5, 0.5, 1.0], device=device)
+        loss = mse(pred, target) * weights
+        return loss.mean()
+
     def prepare_data(self, klines_df):
         data = klines_df[features].values
         data_scaled = self.scaler_X.fit_transform(data)
@@ -180,16 +190,6 @@ class HybridPriceRegressor(nn.Module):
         #     print(f"Labels saved to {save_path}")
 
         return y_scaled
-
-    def weighted_mse_loss(self, pred, target):
-        """
-        Weighted MSE loss prioritizing 20-step outputs over 50-step outputs.
-        pred/target shape: (batch, 6) [min_low_20, max_high_20, mean_close_20, min_low_50, max_high_50, mean_close_50]
-        """
-        mse = nn.MSELoss(reduction='none')
-        weights = torch.tensor([0.5, 2.5, 0.5, 2.0, 0.5, 1.5, 0.5, 1.0], device=device)
-        loss = mse(pred, target) * weights
-        return loss.mean()
 
     def train_model(self, klines_df, epochs=200, batch_size=64, validation_split=0.2, patience=10, device='cuda',
                     save_path="hybrid_price_regressor2.pth"):
@@ -331,7 +331,7 @@ if __name__ == "__main__":
     # Measure training time
     start_train_time = time.time()  # Record start time
     regressor.train_model(sample_data, epochs=100, batch_size=64, validation_split=0.2, patience=20, device=device,
-                          save_path="hybrid_price_regressor_l3_m6_lb_50.pth")
+                          save_path="hybrid_price_regressor_l3_m7_lb_50.pth")
     end_train_time = time.time()  # Record end time
     print(f"Training completed in: {end_train_time - start_train_time:.2f} seconds")
 
