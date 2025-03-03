@@ -189,8 +189,8 @@ class HybridPriceRegressor(nn.Module):
         pred/target shape: (batch, 6) [min_low_20, max_high_20, mean_close_20, min_low_50, max_high_50, mean_close_50]
         """
         mse = nn.MSELoss(reduction='none')
-        weights = torch.tensor([1.0, 1.0, 0.75, 0.75, 0.5, 0.5, 0.25, 0.25],
-                               device=pred.device)  # 10-step: 1.0,  20-step: .75, 50-step: 0.5
+        # weights = torch.tensor([1.0, 1.0, 0.75, 0.75, 0.5, 0.5, 0.25, 0.25], device=pred.device)  # 10-step: 1.0,  20-step: .75, 50-step: 0.5
+        weights = torch.tensor([0.5, 2.5, 0.5, 2.0, 0.5, 1.5, 0.5, 1.0], device=pred.device)  # 10-step: 1.0,  20-step: .75, 50-step: 0.5
         loss = mse(pred, target) * weights
         return loss.mean()
 
@@ -331,7 +331,7 @@ if __name__ == "__main__":
     # Measure training time
     start_train_time = time.time()  # Record start time
     regressor.train_model(sample_data, epochs=100, batch_size=64, validation_split=0.2, patience=20, device=device,
-                          save_path="hybrid_price_regressor_l3_m3.pth")
+                          save_path="hybrid_price_regressor_l3_m3_w.pth")
     end_train_time = time.time()  # Record end time
     print(f"Training completed in: {end_train_time - start_train_time:.2f} seconds")
 
