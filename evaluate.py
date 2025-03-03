@@ -1,10 +1,14 @@
 import os
 import sys
 import time
-import torch
+
 import pandas as pd
+import torch
 from dotenv import load_dotenv
+
 from test_model import HybridPriceRegressor
+
+load_dotenv()
 
 
 def create_prediction_df(predictions, test_data, window_size):
