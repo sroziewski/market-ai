@@ -138,7 +138,7 @@ class HybridPriceRegressor(nn.Module):
         x = self.fc3(x)  # (batch, num_outputs)
         return x
 
-    def weighted_mse_loss(self, pred, target):
+    def weighted_mse_loss(self, pred, target, device='cuda'):
         """
         Weighted MSE loss prioritizing 20-step outputs over 50-step outputs.
         pred/target shape: (batch, 6) [min_low_20, max_high_20, mean_close_20, min_low_50, max_high_50, mean_close_50]
