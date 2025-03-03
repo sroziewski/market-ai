@@ -75,7 +75,7 @@ class PriceDataset(Dataset):
 
 # HybridPriceRegressor Model Definition
 class HybridPriceRegressor(nn.Module):
-    def __init__(self, lookback_period=50, input_features=4, cnn_filters=32, lstm_units=128, dropout_rate=0.3,
+    def __init__(self, lookback_period=50, input_features=4, cnn_filters=32, lstm_units=128, dropout_rate=0.4,
                  attention_heads=4, num_outputs=8):
         super(HybridPriceRegressor, self).__init__()
         self.scaler_X = MinMaxScaler()
@@ -94,10 +94,10 @@ class HybridPriceRegressor(nn.Module):
         # CNN Feature Extraction
         self.conv1 = nn.Conv1d(in_channels=input_features, out_channels=cnn_filters, kernel_size=3, padding=1)
         self.bn1 = nn.BatchNorm1d(cnn_filters)
-        self.pool1 = nn.MaxPool1d(kernel_size=2, stride=1)  # Less aggressive pooling
+        self.pool1 = nn.MaxPool1d(kernel_size=2, stride=2)  # Less aggressive pooling
         self.conv2 = nn.Conv1d(cnn_filters, cnn_filters * 2, kernel_size=3, padding=1)
         self.bn2 = nn.BatchNorm1d(cnn_filters * 2)
-        self.pool2 = nn.MaxPool1d(kernel_size=2, stride=1)
+        self.pool2 = nn.MaxPool1d(kernel_size=2, stride=2)
 
         # LSTM Temporal Processing (increased to 128 units)
         self.lstm1 = nn.LSTM(cnn_filters * 2, lstm_units, batch_first=True)
@@ -187,8 +187,7 @@ class HybridPriceRegressor(nn.Module):
         pred/target shape: (batch, 6) [min_low_20, max_high_20, mean_close_20, min_low_50, max_high_50, mean_close_50]
         """
         mse = nn.MSELoss(reduction='none')
-        weights = torch.tensor([1.0, 1.0, 0.75, 0.75, 0.5, 0.5, 0.25, 0.25],
-                               device=pred.device)  # 10-step: 1.0,  20-step: .75, 50-step: 0.5
+        weights = torch.tensor([0.5, 2.5, 0.5, 2.0, 0.5, 1.5, 0.5, 1.0], device=device)
         loss = mse(pred, target) * weights
         return loss.mean()
 
@@ -318,6 +317,7 @@ if __name__ == "__main__":
         raise ValueError("Environment variable 'BASE_DIR' not set")
 
     # Load data files
+
     file_path = f"{BASE_DIR}/data/crypto/klines/BTCUSDT/BTCUSDT_15m.csv"
     sample_data = pd.read_csv(file_path)
     file_path = f"{BASE_DIR}/data/crypto/klines/ETHUSDT/ETHUSDT_15m.csv"
