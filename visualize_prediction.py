@@ -3,14 +3,14 @@ import pandas as pd
 import os
 
 # Read the CSV data
-data = pd.read_csv("predictions/final_hybrid_price_regressor_l3_m6_lb_50_ETHUSDT_1d.csv")
+data = pd.read_csv("predictions/final_hybrid_price_regressor_l3_m7_lb_50_ETHUSDT_1d.csv")
 
 
 # Function to draw and save the plot
 def plot_columns_and_save():
     # Define the output directory and file name
     output_dir = "visualizations"
-    file_name = "final_hybrid_price_regressor_l3_m6_lb_50_ETHUSDT_1d_window50.png"
+    file_name = "final_hybrid_price_regressor_l3_m7_lb_50_ETHUSDT_1d_dr0_4_window10.png"
     output_path = os.path.join(output_dir, file_name)
 
     # Ensure the output directory exists
@@ -18,12 +18,12 @@ def plot_columns_and_save():
 
     # Create the plot
     plt.figure(figsize=(10, 6))
-    plt.plot(data["window_50_min"], label="window_50_min", color="blue")
-    plt.plot(data["window_50_max"], label="window_50_max", color="green")
+    plt.plot(data["window_10_min"], label="window_10_min", color="blue")
+    plt.plot(data["window_10_max"], label="window_10_max", color="green")
     plt.plot(data["close"], label="close", color="red")
     plt.xlabel("Index")
     plt.ylabel("Value")
-    plt.title("Visualization of window_50_min, window_50_max, and close")
+    plt.title("Visualization of window_10_min, window_10_max, and close")
     plt.legend()
     plt.grid()
 
