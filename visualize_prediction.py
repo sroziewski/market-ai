@@ -3,14 +3,14 @@ import pandas as pd
 import os
 
 # Read the CSV data
-data = pd.read_csv("predictions/final_hybrid_price_regressor_l3_m8_ETHUSDT_1d.csv")
+data = pd.read_csv("predictions/final_hybrid_price_regressor_l3_m8_true_ETHUSDT_1d.csv")
 
 
 # Function to draw and save the plot
 def plot_columns_and_save():
     # Define the output directory and file name
     output_dir = "visualizations"
-    file_name = "final_hybrid_price_regressor_l3_m8_ETHUSDT_1d_window_20.png"
+    file_name = "final_hybrid_price_regressor_l3_m8_true_ETHUSDT_1d_window_20.png"
     output_path = os.path.join(output_dir, file_name)
 
     # Ensure the output directory exists
