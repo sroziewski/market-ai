@@ -4,6 +4,7 @@ from multiprocessing import Pool, cpu_count
 
 import numpy as np
 import pandas as pd
+import talib
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -14,7 +15,7 @@ from tqdm import tqdm  # For progress bar support
 
 load_dotenv()
 
-features = ['open', 'high', 'low', 'close', 'volume']
+features = ['open', 'high', 'low', 'close', 'volume', 'rsi']
 
 
 def process_batch(args):
@@ -246,7 +247,7 @@ class HybridPriceRegressor(nn.Module):
                 for X_batch, y_batch in val_loader:
                     X_batch, y_batch = X_batch.to(device), y_batch.to(device)
                     y_pred = self(X_batch)
-                    val_loss += criterion(y_pred, y_batch).item()
+                    val_loss += self.weighted_mse_loss(y_pred, y_batch).item()
 
             val_loss /= len(val_loader)
 
@@ -306,6 +307,15 @@ class HybridPriceRegressor(nn.Module):
         return [mse, mae]
 
 
+def add_features(df):
+    if 'close' not in df:
+        raise ValueError("The DataFrame must contain a 'close' column.")
+    df['rsi'] = talib.RSI(df['close'], timeperiod=14)  # Default time period is 14
+    df = df.dropna(subset=['rsi']).reset_index(drop=True)
+
+    return df
+
+
 # Main Entry Point
 if __name__ == "__main__":
     device = os.getenv("DEVICE")
@@ -319,7 +329,7 @@ if __name__ == "__main__":
     # Load data files
 
     file_path = f"{BASE_DIR}/data/crypto/klines/BTCUSDT/BTCUSDT_15m.csv"
-    sample_data = pd.read_csv(file_path)
+    sample_data = add_features(pd.read_csv(file_path))
     file_path = f"{BASE_DIR}/data/crypto/klines/ETHUSDT/ETHUSDT_15m.csv"
     test_data = pd.read_csv(file_path)
 
