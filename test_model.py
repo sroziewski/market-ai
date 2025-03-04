@@ -75,7 +75,7 @@ class PriceDataset(Dataset):
 
 # HybridPriceRegressor Model Definition
 class HybridPriceRegressor(nn.Module):
-    def __init__(self, lookback_period=20, input_features=4, cnn_filters=32, lstm_units=256, dropout_rate=0.3,
+    def __init__(self, lookback_period=20, input_features=4, cnn_filters=32, lstm_units=512, dropout_rate=0.3,
                  attention_heads=4, num_outputs=8):
         super(HybridPriceRegressor, self).__init__()
         self.scaler_X = MinMaxScaler()
@@ -83,7 +83,7 @@ class HybridPriceRegressor(nn.Module):
         self.lookback_period = lookback_period  # Reduced to 20
         self.input_features = input_features
         self.cnn_filters = cnn_filters
-        self.lstm_units = lstm_units  # Increased to 256
+        self.lstm_units = lstm_units  # Increased to 512
         self.dropout_rate = dropout_rate
         self.attention_heads = attention_heads
         self.num_outputs = num_outputs  # 6 or 9, depending on labels
@@ -101,18 +101,18 @@ class HybridPriceRegressor(nn.Module):
         self.bn2 = nn.BatchNorm1d(cnn_filters * 2)
         self.pool2 = nn.MaxPool1d(kernel_size=2, stride=2)
 
-        # LSTM Temporal Processing (increased to 256 units)
-        self.lstm1 = nn.LSTM(cnn_filters * 2, lstm_units, batch_first=True)  # 64 → 256
-        self.lstm2 = nn.LSTM(lstm_units, lstm_units // 2, batch_first=True)  # 256 → 128
+        # LSTM Temporal Processing (increased to 512 units)
+        self.lstm1 = nn.LSTM(cnn_filters * 2, lstm_units, batch_first=True)  # 64 → 512
+        self.lstm2 = nn.LSTM(lstm_units, lstm_units // 2, batch_first=True)  # 512 → 256
 
-        # Attention Layer (embed_dim now 128, since lstm_units // 2 = 256 // 2)
+        # Attention Layer (embed_dim now 256, since lstm_units // 2 = 512 // 2)
         self.attention = nn.MultiheadAttention(embed_dim=lstm_units // 2,
                                                num_heads=attention_heads,
                                                dropout=dropout_rate,
                                                batch_first=True)
 
         # Fully Connected Layers for Output
-        self.fc1 = nn.Linear(lstm_units // 2, 64)  # 128 → 64
+        self.fc1 = nn.Linear(lstm_units // 2, 64)  # 256 → 64
         self.dropout1 = nn.Dropout(dropout_rate)
         self.fc2 = nn.Linear(64, 32)
         self.dropout2 = nn.Dropout(dropout_rate)
@@ -127,11 +127,11 @@ class HybridPriceRegressor(nn.Module):
         x = self.pool2(x)
         # LSTM Processing
         x = x.transpose(1, 2)  # (batch, seq_len, features)
-        x, _ = self.lstm1(x)  # (batch, seq_len, 256)
-        x, _ = self.lstm2(x)  # (batch, seq_len, 128)
+        x, _ = self.lstm1(x)  # (batch, seq_len, 512)
+        x, _ = self.lstm2(x)  # (batch, seq_len, 256)
         # Attention Mechanism
-        attn_output, _ = self.attention(x, x, x)  # Self-attention: (batch, seq_len, 128)
-        x = attn_output[:, -1, :]  # Last time step: (batch, 128)
+        attn_output, _ = self.attention(x, x, x)  # Self-attention: (batch, seq_len, 256)
+        x = attn_output[:, -1, :]  # Last time step: (batch, 256)
         # Fully Connected Layers
         x = torch.relu(self.fc1(x))
         x = self.dropout1(x)
@@ -332,7 +332,7 @@ if __name__ == "__main__":
     # Measure training time
     start_train_time = time.time()  # Record start time
     regressor.train_model(sample_data, epochs=100, batch_size=64, validation_split=0.2, patience=20, device=device,
-                          save_path="hybrid_price_regressor_l3_m8_true.pth")
+                          save_path="hybrid_price_regressor_l3_m9.pth")
     end_train_time = time.time()  # Record end time
     print(f"Training completed in: {end_train_time - start_train_time:.2f} seconds")
 
